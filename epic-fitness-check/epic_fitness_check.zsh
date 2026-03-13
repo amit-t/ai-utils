@@ -5,20 +5,31 @@
 #  AI-Driven Epic Fitness Check
 #
 #  Invokes Claude Code (YOLO mode) or Devin to read exported Jira epic
-#  .doc/.docx files, assess them against 5 quality frameworks using AI,
-#  and generate:
+#  .doc/.docx files (or pull via Jira MCP), assess them against 5 quality
+#  frameworks using AI, and generate:
 #    - One fitness-check workbook per epic  (openpyxl .xlsx)
 #    - A portfolio summary workbook
 #    - A draft assessment email  (Markdown)
 #
+#  Input Modes:
+#    FILE mode (default) — reads .doc/.docx files from a directory
+#    MCP mode (--mcp --jira) — pulls epics live from Jira via MCP
+#
 #  Usage:
-#    ./epic_fitness_check.zsh --cly [DIR] [PORTFOLIO]   # Claude Code YOLO
-#    ./epic_fitness_check.zsh --dev [DIR] [PORTFOLIO]   # Devin YOLO
+#    FILE mode:
+#      ./epic_fitness_check.zsh --cly [DIR] [PORTFOLIO]
+#      ./epic_fitness_check.zsh --dev [DIR] [PORTFOLIO]
+#
+#    MCP mode:
+#      ./epic_fitness_check.zsh --cly --mcp --jira [PORTFOLIO] EPIC-1 EPIC-2 ...
+#      ./epic_fitness_check.zsh --dev --mcp --jira [PORTFOLIO] EPIC-1 EPIC-2 ...
 #
 #  Examples:
 #    ./epic_fitness_check.zsh --cly ./Engage "Engage"
 #    ./epic_fitness_check.zsh --dev ./Core   "Core"
-#    ./epic_fitness_check.zsh --cly                     # current dir, auto-named
+#    ./epic_fitness_check.zsh --cly                         # current dir, auto-named
+#    ./epic_fitness_check.zsh --cly --mcp --jira "Engage" ICS-21226 ICS-21799
+#    ./epic_fitness_check.zsh --dev --mcp --jira "Core" REQ-7318 ICS-23947
 #
 #  Requires: claude CLI (for --cly) OR devin CLI (for --dev)
 # =============================================================================
@@ -27,29 +38,61 @@ set -euo pipefail
 
 # ── Parse args ──────────────────────────────────────────────────────────────
 AI_MODE=""
+INPUT_MODE="file"
+MCP_SOURCE=""
 POSITIONAL=()
 
 for arg in "$@"; do
     case "$arg" in
-        --cly) AI_MODE="claude" ;;
-        --dev) AI_MODE="devin"  ;;
-        *)     POSITIONAL+=("$arg") ;;
+        --cly)  AI_MODE="claude" ;;
+        --dev)  AI_MODE="devin"  ;;
+        --mcp)  INPUT_MODE="mcp" ;;
+        --jira) MCP_SOURCE="jira" ;;
+        *)      POSITIONAL+=("$arg") ;;
     esac
 done
 
 if [[ -z "$AI_MODE" ]]; then
     echo "ERROR: Specify --cly (Claude Code) or --dev (Devin)"
-    echo "Usage: $0 --cly|--dev [EPIC_DIR] [PORTFOLIO_NAME]"
+    echo ""
+    echo "Usage:"
+    echo "  FILE mode:  $0 --cly|--dev [EPIC_DIR] [PORTFOLIO]"
+    echo "  MCP mode:   $0 --cly|--dev --mcp --jira [PORTFOLIO] EPIC-1 EPIC-2 ..."
     exit 1
 fi
 
-EPIC_DIR="${POSITIONAL[0]:-$(pwd)}"
-PORTFOLIO="${POSITIONAL[1]:-$(basename "$EPIC_DIR")}"
+if [[ "$INPUT_MODE" == "mcp" && -z "$MCP_SOURCE" ]]; then
+    echo "ERROR: --mcp requires a source flag (currently supported: --jira)"
+    echo "Usage: $0 --cly|--dev --mcp --jira [PORTFOLIO] EPIC-1 EPIC-2 ..."
+    exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")" && pwd)"
-OUTPUT_DIR="$EPIC_DIR/fitness_output"
-TMP_DIR="$EPIC_DIR/.epic_fitness_tmp"
-mkdir -p "$TMP_DIR"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M')"
+
+if [[ "$INPUT_MODE" == "mcp" ]]; then
+    # MCP mode: first positional = portfolio name, rest = epic IDs
+    PORTFOLIO="${POSITIONAL[0]:-mcp-epics}"
+    EPIC_IDS=("${POSITIONAL[@]:1}")
+    EPIC_COUNT=${#EPIC_IDS[@]}
+    if [[ $EPIC_COUNT -eq 0 ]]; then
+        echo "ERROR: No epic IDs provided"
+        echo "Usage: $0 --cly|--dev --mcp --jira PORTFOLIO EPIC-1 EPIC-2 ..."
+        exit 1
+    fi
+    EPIC_DIR="$(pwd)"
+    OUTPUT_DIR="$EPIC_DIR/fitness_output"
+    TMP_DIR="$EPIC_DIR/.epic_fitness_tmp"
+    CONVERTED=0
+else
+    # FILE mode: first positional = epic dir, second = portfolio name
+    EPIC_DIR="${POSITIONAL[0]:-$(pwd)}"
+    PORTFOLIO="${POSITIONAL[1]:-$(basename "$EPIC_DIR")}"
+    OUTPUT_DIR="$EPIC_DIR/fitness_output"
+    TMP_DIR="$EPIC_DIR/.epic_fitness_tmp"
+fi
+
+mkdir -p "$TMP_DIR"
 
 # ── Colours ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -62,10 +105,18 @@ err()  { echo -e "${RED}[-]${NC} $*"; exit 1; }
 
 AI_MODE_UPPER=$(echo "$AI_MODE" | tr '[:lower:]' '[:upper:]')
 
+INPUT_MODE_UPPER=$(echo "$INPUT_MODE" | tr '[:lower:]' '[:upper:]')
+MCP_SOURCE_UPPER=$(echo "$MCP_SOURCE" | tr '[:lower:]' '[:upper:]')
+
 echo ""
 echo -e "${BOLD}================================================================${NC}"
 echo -e "${BOLD}  EPIC FITNESS CHECK — AI-DRIVEN${NC}"
-echo -e "${BOLD}  Mode: ${AI_MODE_UPPER} | Portfolio: $PORTFOLIO${NC}"
+if [[ "$INPUT_MODE" == "mcp" ]]; then
+    echo -e "${BOLD}  Agent: ${AI_MODE_UPPER} | Source: MCP+${MCP_SOURCE_UPPER} | Portfolio: $PORTFOLIO${NC}"
+    echo -e "${BOLD}  Epics: ${EPIC_IDS[*]}${NC}"
+else
+    echo -e "${BOLD}  Agent: ${AI_MODE_UPPER} | Source: FILE | Portfolio: $PORTFOLIO${NC}"
+fi
 echo -e "${BOLD}  INVEST · QUS · IEEE 29148 · ISTQB · Grooming${NC}"
 echo -e "${BOLD}================================================================${NC}"
 echo ""
@@ -79,79 +130,125 @@ elif [[ "$AI_MODE" == "devin" ]]; then
     ok "Devin CLI found"
 fi
 
-# ── Discover epic files ──────────────────────────────────────────────────────
-log "Scanning $EPIC_DIR for epic files..."
-
-DOC_FILES=()
-while IFS= read -r -d '' f; do
-    DOC_FILES+=("$f")
-done < <(find "$EPIC_DIR" -maxdepth 1 \( -name "*.doc" -o -name "*.docx" \) -print0 2>/dev/null | sort -z)
-
-EPIC_COUNT=${#DOC_FILES[@]}
-
-if [[ $EPIC_COUNT -eq 0 ]]; then
-    err "No .doc or .docx files found in $EPIC_DIR"
-fi
-ok "Found $EPIC_COUNT epic files"
-
-# ── Convert docs to text ────────────────────────────────────────────────────
-log "Converting docs to text..."
-mkdir -p "$TMP_DIR/txt"
-
-# Convert using macOS textutil (primary) with soffice as fallback
-CONVERTED=0
-for f in "${DOC_FILES[@]}"; do
-    fname="$(basename "$f")"
-    base="${fname%.*}"
-    outfile="$TMP_DIR/txt/$base.txt"
-
-    # Try macOS textutil first (handles .doc and .docx natively)
-    if command -v textutil >/dev/null 2>&1; then
-        textutil -convert txt -output "$outfile" "$f" 2>/dev/null || true
-    fi
-
-    # Fallback to LibreOffice if textutil didn't produce output
-    if [[ ! -f "$outfile" ]] || [[ ! -s "$outfile" ]]; then
-        if command -v soffice >/dev/null 2>&1; then
-            soffice --headless --convert-to "txt:Text" --outdir "$TMP_DIR/txt/" "$f" >/dev/null 2>&1 || true
-        fi
-    fi
-
-    if [[ -f "$outfile" ]] && [[ -s "$outfile" ]]; then
-        ((CONVERTED++)) || true
-    else
-        warn "Could not convert: $fname"
-    fi
-done
-ok "Converted $CONVERTED / $EPIC_COUNT files"
-
-# ── Combine into corpus ────────────────────────────────────────────────────
-CORPUS="$TMP_DIR/corpus.txt"
-for f in "$TMP_DIR/txt/"*.txt; do
-    base="$(basename "$f" .txt)"
-    echo "" >> "$CORPUS"
-    echo "$(printf '=%.0s' {1..80})" >> "$CORPUS"
-    echo "### FILE: $base" >> "$CORPUS"
-    echo "$(printf '=%.0s' {1..80})" >> "$CORPUS"
-    grep -v "Generated at" "$f" >> "$CORPUS" || true
-done
-
-CORPUS_SIZE=$(wc -c < "$CORPUS")
-ok "Corpus assembled: $CORPUS_SIZE bytes ($EPIC_COUNT epics)"
-
 # ── Create output directory ─────────────────────────────────────────────────
 mkdir -p "$OUTPUT_DIR"
 
-# ── Copy corpus to output for AI agent access ───────────────────────────────
-cp "$CORPUS" "$OUTPUT_DIR/.corpus.txt"
+if [[ "$INPUT_MODE" == "file" ]]; then
+    # ── FILE MODE: Discover, convert, and assemble corpus ────────────────────
+
+    # ── Discover epic files ──────────────────────────────────────────────────
+    log "Scanning $EPIC_DIR for epic files..."
+
+    DOC_FILES=()
+    while IFS= read -r -d '' f; do
+        DOC_FILES+=("$f")
+    done < <(find "$EPIC_DIR" -maxdepth 1 \( -name "*.doc" -o -name "*.docx" \) -print0 2>/dev/null | sort -z)
+
+    EPIC_COUNT=${#DOC_FILES[@]}
+
+    if [[ $EPIC_COUNT -eq 0 ]]; then
+        err "No .doc or .docx files found in $EPIC_DIR"
+    fi
+    ok "Found $EPIC_COUNT epic files"
+
+    # ── Convert docs to text ─────────────────────────────────────────────────
+    log "Converting docs to text..."
+    mkdir -p "$TMP_DIR/txt"
+
+    # Convert using macOS textutil (primary) with soffice as fallback
+    CONVERTED=0
+    for f in "${DOC_FILES[@]}"; do
+        fname="$(basename "$f")"
+        base="${fname%.*}"
+        outfile="$TMP_DIR/txt/$base.txt"
+
+        # Try macOS textutil first (handles .doc and .docx natively)
+        if command -v textutil >/dev/null 2>&1; then
+            textutil -convert txt -output "$outfile" "$f" 2>/dev/null || true
+        fi
+
+        # Fallback to LibreOffice if textutil didn't produce output
+        if [[ ! -f "$outfile" ]] || [[ ! -s "$outfile" ]]; then
+            if command -v soffice >/dev/null 2>&1; then
+                soffice --headless --convert-to "txt:Text" --outdir "$TMP_DIR/txt/" "$f" >/dev/null 2>&1 || true
+            fi
+        fi
+
+        if [[ -f "$outfile" ]] && [[ -s "$outfile" ]]; then
+            ((CONVERTED++)) || true
+        else
+            warn "Could not convert: $fname"
+        fi
+    done
+    ok "Converted $CONVERTED / $EPIC_COUNT files"
+
+    # ── Combine into corpus ──────────────────────────────────────────────────
+    CORPUS="$TMP_DIR/corpus.txt"
+    for f in "$TMP_DIR/txt/"*.txt; do
+        base="$(basename "$f" .txt)"
+        echo "" >> "$CORPUS"
+        echo "$(printf '=%.0s' {1..80})" >> "$CORPUS"
+        echo "### FILE: $base" >> "$CORPUS"
+        echo "$(printf '=%.0s' {1..80})" >> "$CORPUS"
+        grep -v "Generated at" "$f" >> "$CORPUS" || true
+    done
+
+    CORPUS_SIZE=$(wc -c < "$CORPUS")
+    ok "Corpus assembled: $CORPUS_SIZE bytes ($EPIC_COUNT epics)"
+
+    # ── Copy corpus to output for AI agent access ────────────────────────────
+    cp "$CORPUS" "$OUTPUT_DIR/.corpus.txt"
+
+elif [[ "$INPUT_MODE" == "mcp" ]]; then
+    # ── MCP MODE: Epic IDs provided, AI agent will pull via Jira MCP ─────────
+    ok "MCP mode: $EPIC_COUNT epic IDs to fetch via Jira MCP"
+    for eid in "${EPIC_IDS[@]}"; do
+        log "  → $eid"
+    done
+
+    # Write epic ID list for the AI agent
+    printf '%s\n' "${EPIC_IDS[@]}" > "$OUTPUT_DIR/.epic_ids.txt"
+    ok "Epic ID list written → $OUTPUT_DIR/.epic_ids.txt"
+fi
 
 # ── Write the AI prompt ─────────────────────────────────────────────────────
 log "Writing AI assessment prompt..."
 
 PROMPT_FILE="$TMP_DIR/prompt.md"
 
-cat > "$PROMPT_FILE" << 'PROMPT_HEREDOC'
-# Epic Fitness Check — AI Assessment Agent Prompt
+# ── Mode-specific intro ──────────────────────────────────────────────────────
+if [[ "$INPUT_MODE" == "mcp" ]]; then
+cat > "$PROMPT_FILE" << 'PROMPT_INTRO'
+# Epic Fitness Check — AI Assessment Agent Prompt (MCP Mode)
+
+You are an expert agile coach and quality engineer. Your job is to pull Jira
+epics via the Jira MCP server, assess each one against 5 industry-standard
+quality frameworks, then generate professional Excel workbooks and an assessment
+email.
+
+## CRITICAL INSTRUCTIONS
+
+1. You have access to the **Jira MCP server**. Use it to fetch each epic listed below.
+2. For each epic ID, use the Jira MCP `get_issue` tool to retrieve the full issue details
+   (summary, description, status, priority, assignee, reporter, components, labels,
+   acceptance criteria, linked issues, parent link, comments, and all custom fields).
+3. Read the epic ID list at `{OUTPUT_DIR}/.epic_ids.txt` — one ID per line.
+4. For EACH epic, perform a deep qualitative assessment using the 5 frameworks below.
+5. Generate one `.xlsx` workbook per epic using openpyxl (exact format specified below).
+6. Generate one portfolio summary `.xlsx` workbook.
+7. Generate one `assessment_email.md` file.
+8. All outputs go into `{OUTPUT_DIR}/`
+9. Make sure `pip install openpyxl --break-system-packages -q` runs first if needed.
+10. Also save the raw fetched data for each epic as `{OUTPUT_DIR}/.raw/{EPIC_ID}.json`
+
+## EPIC IDs TO FETCH VIA JIRA MCP
+
+{EPIC_ID_LIST}
+
+PROMPT_INTRO
+else
+cat > "$PROMPT_FILE" << 'PROMPT_INTRO'
+# Epic Fitness Check — AI Assessment Agent Prompt (File Mode)
 
 You are an expert agile coach and quality engineer. Your job is to read exported
 Jira epics, assess each one against 5 industry-standard quality frameworks, then
@@ -168,6 +265,11 @@ generate professional Excel workbooks and an assessment email.
 7. All outputs go into `{OUTPUT_DIR}/`
 8. Make sure `pip install openpyxl --break-system-packages -q` runs first if needed
 
+PROMPT_INTRO
+fi
+
+# ── Shared frameworks, scoring guidelines, workbook/email format ──────────────
+cat >> "$PROMPT_FILE" << 'PROMPT_SHARED'
 ## THE 5 FRAMEWORKS
 
 ### Framework 1: GROOMING READINESS (G1–G10)
@@ -247,7 +349,7 @@ Rate 1–5. **Pass threshold:** ≥ 28/40 AND T1, T2, T7 each ≥ 3.
 
 ## HOW TO SCORE (AI ASSESSMENT GUIDELINES)
 
-Read each epic's FULL exported text carefully. Use your judgment as an expert:
+Read each epic's FULL text carefully. Use your judgment as an expert:
 
 **For Grooming (Yes/Partial/No):**
 - "Yes" = clear, unambiguous evidence in the epic text
@@ -388,6 +490,34 @@ Provide concrete PO actions:
 4. Link to parent REQ/ARM (count missing)
 
 Sign both emails as: Amit
+PROMPT_SHARED
+
+# ── Mode-specific execution plan ─────────────────────────────────────────────
+if [[ "$INPUT_MODE" == "mcp" ]]; then
+cat >> "$PROMPT_FILE" << 'PROMPT_EXEC'
+
+## EXECUTION PLAN
+
+Write a Python script that:
+1. Uses the Jira MCP `get_issue` tool to fetch EACH epic by ID
+2. For each epic, extract ALL fields: summary, description, status, priority,
+   assignee, reporter, components, labels, acceptance criteria, linked issues,
+   parent link, comments, custom fields (PI, scrum team, business owner, size estimate)
+3. Save the raw fetched JSON for each epic to `{OUTPUT_DIR}/.raw/{EPIC_ID}.json`
+4. Scores each epic against all 5 frameworks using YOUR AI judgment (not keyword matching)
+5. Generates individual workbooks with all 8 tabs, proper formatting, formulas, colors
+6. Generates portfolio summary workbook
+7. Generates assessment email with real numbers
+8. Prints progress to stdout
+
+Run the script after writing it. Use `pip install openpyxl --break-system-packages -q` if needed.
+
+All output files go in: `{OUTPUT_DIR}/`
+Epic ID list is at: `{OUTPUT_DIR}/.epic_ids.txt`
+Portfolio name is: `{PORTFOLIO}`
+PROMPT_EXEC
+else
+cat >> "$PROMPT_FILE" << 'PROMPT_EXEC'
 
 ## EXECUTION PLAN
 
@@ -406,13 +536,22 @@ Run the script after writing it. Use `pip install openpyxl --break-system-packag
 All output files go in: `{OUTPUT_DIR}/`
 Corpus file is at: `{OUTPUT_DIR}/.corpus.txt`
 Portfolio name is: `{PORTFOLIO}`
-PROMPT_HEREDOC
+PROMPT_EXEC
+fi
 
 # ── Substitute placeholders in the prompt ────────────────────────────────────
 sed -i '' "s|{OUTPUT_DIR}|$OUTPUT_DIR|g" "$PROMPT_FILE"
 sed -i '' "s|{PORTFOLIO}|$PORTFOLIO|g" "$PROMPT_FILE"
 sed -i '' "s|{TIMESTAMP}|$TIMESTAMP|g" "$PROMPT_FILE"
 sed -i '' "s|{EPIC_COUNT}|$EPIC_COUNT|g" "$PROMPT_FILE"
+
+# Substitute MCP-specific placeholders
+if [[ "$INPUT_MODE" == "mcp" ]]; then
+    EPIC_ID_LIST=$(printf '- `%s`\n' "${EPIC_IDS[@]}")
+    # Use awk for multi-line substitution (sed can't handle newlines reliably)
+    awk -v replacement="$EPIC_ID_LIST" '{gsub(/{EPIC_ID_LIST}/, replacement); print}' "$PROMPT_FILE" > "$PROMPT_FILE.tmp"
+    mv "$PROMPT_FILE.tmp" "$PROMPT_FILE"
+fi
 
 ok "Prompt written ($( wc -w < "$PROMPT_FILE" ) words)"
 
@@ -496,9 +635,16 @@ echo -e "${BOLD}  COMPLETE${NC}"
 echo -e "${BOLD}================================================================${NC}"
 echo ""
 echo -e "  AI Engine    : ${BOLD}${AI_MODE_UPPER}${NC}"
+if [[ "$INPUT_MODE" == "mcp" ]]; then
+    echo -e "  Input Source : ${BOLD}MCP + ${MCP_SOURCE_UPPER}${NC}"
+else
+    echo -e "  Input Source : ${BOLD}FILE${NC}"
+fi
 echo -e "  Portfolio    : ${BOLD}$PORTFOLIO${NC}"
-echo -e "  Epics found  : ${BOLD}$EPIC_COUNT${NC}"
-echo -e "  Converted    : ${BOLD}$CONVERTED${NC}"
+echo -e "  Epics        : ${BOLD}$EPIC_COUNT${NC}"
+if [[ "$INPUT_MODE" == "file" ]]; then
+    echo -e "  Converted    : ${BOLD}$CONVERTED${NC}"
+fi
 echo -e "  Workbooks    : ${BOLD}$WORKBOOK_COUNT${NC}"
 echo ""
 echo -e "  Output dir   : ${BOLD}$OUTPUT_DIR${NC}"
@@ -515,7 +661,11 @@ if [[ $WORKBOOK_COUNT -gt 0 || $SUMMARY_EXISTS -gt 0 ]]; then
 fi
 
 echo -e "  ${YELLOW}Prompt used: $OUTPUT_DIR/.prompt.md${NC}"
-echo -e "  ${YELLOW}Corpus: $OUTPUT_DIR/.corpus.txt${NC}"
+if [[ "$INPUT_MODE" == "mcp" ]]; then
+    echo -e "  ${YELLOW}Epic IDs: $OUTPUT_DIR/.epic_ids.txt${NC}"
+else
+    echo -e "  ${YELLOW}Corpus: $OUTPUT_DIR/.corpus.txt${NC}"
+fi
 echo ""
 
 # ── Cleanup temp ─────────────────────────────────────────────────────────────
