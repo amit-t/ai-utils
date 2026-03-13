@@ -47,7 +47,8 @@ EPIC_DIR="${POSITIONAL[0]:-$(pwd)}"
 PORTFOLIO="${POSITIONAL[1]:-$(basename "$EPIC_DIR")}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")" && pwd)"
 OUTPUT_DIR="$EPIC_DIR/fitness_output"
-TMP_DIR="$(mktemp -d /tmp/epic_fitness_XXXXXX)"
+TMP_DIR="$EPIC_DIR/.epic_fitness_tmp"
+mkdir -p "$TMP_DIR"
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M')"
 
 # ── Colours ──────────────────────────────────────────────────────────────────
@@ -59,10 +60,12 @@ ok()   { echo -e "${GREEN}[+]${NC} $*"; }
 warn() { echo -e "${YELLOW}[!]${NC} $*"; }
 err()  { echo -e "${RED}[-]${NC} $*"; exit 1; }
 
+AI_MODE_UPPER=$(echo "$AI_MODE" | tr '[:lower:]' '[:upper:]')
+
 echo ""
 echo -e "${BOLD}================================================================${NC}"
 echo -e "${BOLD}  EPIC FITNESS CHECK — AI-DRIVEN${NC}"
-echo -e "${BOLD}  Mode: ${AI_MODE^^} | Portfolio: $PORTFOLIO${NC}"
+echo -e "${BOLD}  Mode: ${AI_MODE_UPPER} | Portfolio: $PORTFOLIO${NC}"
 echo -e "${BOLD}  INVEST · QUS · IEEE 29148 · ISTQB · Grooming${NC}"
 echo -e "${BOLD}================================================================${NC}"
 echo ""
@@ -95,55 +98,26 @@ ok "Found $EPIC_COUNT epic files"
 log "Converting docs to text..."
 mkdir -p "$TMP_DIR/txt"
 
-# Write the portable converter (handles sandboxed AF_UNIX sockets)
-cat > "$TMP_DIR/convert.py" << 'CONVERT_EOF'
-#!/usr/bin/env python3
-import os, sys, socket, subprocess, tempfile
-from pathlib import Path
-
-_SHIM = Path(tempfile.gettempdir()) / "lo_socket_shim.so"
-_SHIM_SRC = r"""
-#define _GNU_SOURCE
-#include <dlfcn.h>
-#include <errno.h>
-#include <sys/socket.h>
-static int (*_real_socket)(int,int,int) = NULL;
-int socket(int domain, int type, int protocol) {
-    if (!_real_socket) _real_socket = dlsym(RTLD_NEXT, "socket");
-    if (domain == AF_UNIX) { errno = EAFNOSUPPORT; return -1; }
-    return _real_socket(domain, type, protocol);
-}
-"""
-
-def get_env():
-    env = os.environ.copy()
-    env["SAL_USE_VCLPLUGIN"] = "svp"
-    try:
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.close()
-    except OSError:
-        if not _SHIM.exists():
-            src = Path(tempfile.gettempdir()) / "lo_socket_shim.c"
-            src.write_text(_SHIM_SRC)
-            subprocess.run(["gcc","-shared","-fPIC","-o",str(_SHIM),str(src),"-ldl"],
-                           check=True, capture_output=True)
-            src.unlink()
-        env["LD_PRELOAD"] = str(_SHIM)
-    return env
-
-if __name__ == "__main__":
-    env = get_env()
-    r = subprocess.run(["soffice","--headless","--convert-to","txt:Text",
-                        "--outdir",sys.argv[2],sys.argv[1]], env=env, capture_output=True)
-    sys.exit(r.returncode)
-CONVERT_EOF
-
+# Convert using macOS textutil (primary) with soffice as fallback
 CONVERTED=0
 for f in "${DOC_FILES[@]}"; do
     fname="$(basename "$f")"
     base="${fname%.*}"
     outfile="$TMP_DIR/txt/$base.txt"
-    python3 "$TMP_DIR/convert.py" "$f" "$TMP_DIR/txt/" >/dev/null 2>&1 || true
-    if [[ -f "$outfile" ]]; then
+
+    # Try macOS textutil first (handles .doc and .docx natively)
+    if command -v textutil >/dev/null 2>&1; then
+        textutil -convert txt -output "$outfile" "$f" 2>/dev/null || true
+    fi
+
+    # Fallback to LibreOffice if textutil didn't produce output
+    if [[ ! -f "$outfile" ]] || [[ ! -s "$outfile" ]]; then
+        if command -v soffice >/dev/null 2>&1; then
+            soffice --headless --convert-to "txt:Text" --outdir "$TMP_DIR/txt/" "$f" >/dev/null 2>&1 || true
+        fi
+    fi
+
+    if [[ -f "$outfile" ]] && [[ -s "$outfile" ]]; then
         ((CONVERTED++)) || true
     else
         warn "Could not convert: $fname"
@@ -435,10 +409,10 @@ Portfolio name is: `{PORTFOLIO}`
 PROMPT_HEREDOC
 
 # ── Substitute placeholders in the prompt ────────────────────────────────────
-sed -i "s|{OUTPUT_DIR}|$OUTPUT_DIR|g" "$PROMPT_FILE"
-sed -i "s|{PORTFOLIO}|$PORTFOLIO|g" "$PROMPT_FILE"
-sed -i "s|{TIMESTAMP}|$TIMESTAMP|g" "$PROMPT_FILE"
-sed -i "s|{EPIC_COUNT}|$EPIC_COUNT|g" "$PROMPT_FILE"
+sed -i '' "s|{OUTPUT_DIR}|$OUTPUT_DIR|g" "$PROMPT_FILE"
+sed -i '' "s|{PORTFOLIO}|$PORTFOLIO|g" "$PROMPT_FILE"
+sed -i '' "s|{TIMESTAMP}|$TIMESTAMP|g" "$PROMPT_FILE"
+sed -i '' "s|{EPIC_COUNT}|$EPIC_COUNT|g" "$PROMPT_FILE"
 
 ok "Prompt written ($( wc -w < "$PROMPT_FILE" ) words)"
 
@@ -448,7 +422,7 @@ cp "$PROMPT_FILE" "$OUTPUT_DIR/.prompt.md"
 # ── Invoke the AI agent ──────────────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}────────────────────────────────────────────────────────${NC}"
-echo -e "${BOLD}  LAUNCHING AI AGENT: ${AI_MODE^^}${NC}"
+echo -e "${BOLD}  LAUNCHING AI AGENT: ${AI_MODE_UPPER}${NC}"
 echo -e "${BOLD}────────────────────────────────────────────────────────${NC}"
 echo ""
 
@@ -475,12 +449,13 @@ elif [[ "$AI_MODE" == "devin" ]]; then
     log "Working directory: $OUTPUT_DIR"
 
     # Devin invocation:
-    #   --yes = auto-confirm (YOLO mode)
-    #   -p    = prompt mode (non-interactive)
+    #   --permission-mode dangerous = auto-approves all tools (YOLO mode)
+    #   -p                          = non-interactive print mode (process prompt and exit)
+    #   --prompt-file               = load prompt from file
     #   We cd into OUTPUT_DIR so Devin sees the corpus and writes output there
     (
         cd "$OUTPUT_DIR"
-        devin --yes -p "$PROMPT_CONTENT"
+        devin --permission-mode dangerous -p --prompt-file "$PROMPT_FILE"
     )
     EXIT_CODE=$?
 fi
@@ -520,7 +495,7 @@ echo -e "${BOLD}================================================================
 echo -e "${BOLD}  COMPLETE${NC}"
 echo -e "${BOLD}================================================================${NC}"
 echo ""
-echo -e "  AI Engine    : ${BOLD}${AI_MODE^^}${NC}"
+echo -e "  AI Engine    : ${BOLD}${AI_MODE_UPPER}${NC}"
 echo -e "  Portfolio    : ${BOLD}$PORTFOLIO${NC}"
 echo -e "  Epics found  : ${BOLD}$EPIC_COUNT${NC}"
 echo -e "  Converted    : ${BOLD}$CONVERTED${NC}"
