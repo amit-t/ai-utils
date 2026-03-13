@@ -584,17 +584,17 @@ if [[ "$AI_MODE" == "claude" ]]; then
     EXIT_CODE=$?
 
 elif [[ "$AI_MODE" == "devin" ]]; then
-    log "Invoking Devin in YOLO mode..."
+    log "Invoking Devin in interactive mode..."
     log "Working directory: $OUTPUT_DIR"
 
     # Devin invocation:
     #   --permission-mode dangerous = auto-approves all tools (YOLO mode)
-    #   -p                          = non-interactive print mode (process prompt and exit)
-    #   --prompt-file               = load prompt from file
+    #   --prompt-file               = seed the session with the assessment prompt
+    #   Interactive mode (no -p flag) so you can watch Devin work
     #   We cd into OUTPUT_DIR so Devin sees the corpus and writes output there
     (
         cd "$OUTPUT_DIR"
-        devin --permission-mode dangerous -p --prompt-file "$PROMPT_FILE"
+        devin --permission-mode dangerous --prompt-file "$PROMPT_FILE"
     )
     EXIT_CODE=$?
 fi
