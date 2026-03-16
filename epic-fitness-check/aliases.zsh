@@ -125,4 +125,4 @@ export EPIC_FITNESS_SCRIPT
 export EPIC_FITNESS_DIR
 export EPIC_FITNESS_PROMPT="$EPIC_FITNESS_DIR/PROMPT.md"
 
-echo "Epic Fitness Check aliases loaded. Use 'efc.help' for usage information."
+# echo "Epic Fitness Check aliases loaded. Use 'efc.help' for usage information."
