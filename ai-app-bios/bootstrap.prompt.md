@@ -74,35 +74,23 @@ mkdir -p {ROOT_DIR}/engineering
 mkdir -p {ROOT_DIR}/tools
 ```
 
-### 3.2 — Clone pm-os scaffold
+### 3.2 — Fork pm-os scaffold
 ```bash
-git clone {pmos_url} {PMOS_DIR}
+gh repo fork {pmos_url} --clone --remote --fork-name {project_slug}-pm-os
+mv {project_slug}-pm-os {PMOS_DIR}
 ```
 
-### 3.3 — Clone doe-os scaffold
+### 3.3 — Fork doe-os scaffold
 ```bash
-git clone {doeos_url} {DOEOS_DIR}
+gh repo fork {doeos_url} --clone --remote --fork-name {project_slug}-doe-os
+mv {project_slug}-doe-os {DOEOS_DIR}
 ```
 
-### 3.4 — Clone app repo (only if URL was provided)
+### 3.4 — Fork app repo (only if URL was provided)
+`{app_repo_name}` = the last path segment of `{app_url}` (e.g. `https://github.com/org/my-app` → `my-app`)
 ```bash
-git clone {app_url} {APP_DIR}
-```
-
-### 3.5 — Detach pm-os from scaffold git history (fresh repo for this project)
-```bash
-rm -rf {PMOS_DIR}/.git
-git -C {PMOS_DIR} init -q
-git -C {PMOS_DIR} add -A
-git -C {PMOS_DIR} commit -q -m "chore: init {project_name} pm-os from scaffold"
-```
-
-### 3.6 — Detach doe-os from scaffold git history
-```bash
-rm -rf {DOEOS_DIR}/.git
-git -C {DOEOS_DIR} init -q
-git -C {DOEOS_DIR} add -A
-git -C {DOEOS_DIR} commit -q -m "chore: init {project_name} doe-os from scaffold"
+gh repo fork {app_url} --clone --remote
+mv {app_repo_name} {APP_DIR}
 ```
 
 ### 3.7 — Create approved PRDs gate folder
@@ -481,7 +469,7 @@ Print a clean summary of what was created:
   ✓ Root:          {ROOT_DIR}
   ✓ pm-os:         {PMOS_DIR}
   ✓ doe-os:        {DOEOS_DIR}
-  ✓ App:           {APP_DIR}  (or "not cloned — add later")
+  ✓ App:           {APP_DIR}  (or "not forked — add later")
   ✓ Sync scripts:  {sync_target}
   ✓ Claude memory: {memory_dir}
 
@@ -500,4 +488,4 @@ Print a clean summary of what was created:
   Happy building.
 ```
 
-If the app was not cloned, add a note: "Sync scripts are in {ROOT_DIR}/tools/ — move them to your app's ai/ folder when you create it."
+If the app was not forked, add a note: "Sync scripts are in {ROOT_DIR}/tools/ — move them to your app's ai/ folder when you create it."
