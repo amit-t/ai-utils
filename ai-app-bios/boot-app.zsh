@@ -13,9 +13,8 @@ if [[ ! -f "$PROMPT_FILE" ]]; then
   exit 1
 fi
 
-if ! command -v cly >/dev/null 2>&1; then
-  printf "Error: 'cly' command not found.\n" >&2
-  printf "Ensure your cly alias (claude --dangerously-skip-permissions) is set up.\n" >&2
+if ! command -v claude >/dev/null 2>&1; then
+  printf "Error: 'claude' command not found. Ensure the Claude CLI is installed and in your PATH.\n" >&2
   exit 1
 fi
 
@@ -28,4 +27,4 @@ FULL_PROMPT="$(cat "$PROMPT_FILE")
 Bootstrap context: Install the new project in this directory: ${WORKING_DIR}
 "
 
-cly "$FULL_PROMPT"
+claude --dangerously-skip-permissions "$FULL_PROMPT"

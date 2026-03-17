@@ -28,8 +28,32 @@ Ask these together. For each, offer numbered options and let them pick or type t
 **Cloud / Infra:** AWS | GCP | Azure | Self-hosted / VPS | Other
 **Additional stack notes** (ORM, cache, monorepo tool, etc.) — optional, can be blank
 
-### Section 3 — Repositories
+### Section 2b — Architecture & Folder Structure
+Ask this after the tech stack. Present numbered options with descriptions so the user can make an informed choice. Explain briefly why each matters and give a recommendation based on their chosen stack.
+
+**Architecture pattern — pick one (or type your own):**
+
+| # | Pattern | Description | Best For | Example Folder Layout |
+|---|---------|-------------|----------|----------------------|
+| 1 | **Clean Architecture** | Uncle Bob's layered approach. Strict dependency rule: inner layers never import outer. Layers: entities → use cases → interface adapters → frameworks. | Medium–large apps, teams > 2, long-lived products needing testability | `src/{domain,application,infrastructure,presentation}/` |
+| 2 | **Hexagonal (Ports & Adapters)** | Business logic in the centre, external systems plug in via ports (interfaces) and adapters (implementations). Easy to swap DB, API, or UI. | API-heavy backends, microservices, projects needing high swappability | `src/{core/ports,core/services,adapters/in,adapters/out}/` |
+| 3 | **Feature-Based (Vertical Slices)** | Each feature is a self-contained folder with its own routes, components, services, and tests. Minimal cross-feature imports. | Fast-moving startups, small teams, monorepos with many independent features | `src/features/{auth,dashboard,billing}/` each with `{api,ui,model,test}/` |
+| 4 | **Modular Monolith** | Domain-driven modules with clear public APIs between them. Monolith in deployment, microservice-ready in code boundaries. | Teams planning future service extraction, complex domains | `src/modules/{users,payments,notifications}/` each with `{domain,infra,api}/` |
+| 5 | **MVC / MVVM** | Classic separation: Model (data), View (UI), Controller/ViewModel (logic). Straightforward and widely understood. | Simple CRUD apps, MVPs, solo developers, rapid prototyping | `src/{models,views,controllers}/` or `src/{models,views,viewmodels}/` |
+| 6 | **Layered (N-Tier)** | Horizontal layers: presentation → business logic → data access. Each layer only calls the one below. Simple but can lead to "god service" classes at scale. | Traditional REST APIs, smaller projects, teams familiar with enterprise Java/.NET patterns | `src/{api,services,repositories,models}/` |
+
+**Recommendation guidance** (say this to the user):
+- For **React + Vite / Next.js** frontends: Feature-Based or Clean Architecture work best. Feature-Based is faster to start; Clean scales better.
+- For **Elysia / Express / FastAPI** backends: Hexagonal or Clean Architecture are strongest for APIs. Feature-Based works well for smaller APIs.
+- For **monorepos** (pnpm/Turborepo): Modular Monolith + Feature-Based is a natural fit — each package or app follows Feature-Based internally.
+- For **MVPs / solo devs**: MVC or Feature-Based — lowest ceremony, fastest to ship.
+- For **teams > 3 / long-lived products**: Clean Architecture or Hexagonal — the upfront structure pays off in maintainability.
+
+After they pick, confirm: "I'll use **{pattern}** for the folder scaffold structure in the first bootstrap PRD."
+
+### Section 3 — Repositories & GitHub Org
 Ask these together:
+- **GitHub org or username** under which ALL repos will be created — forks (pm-os, doe-os, app) and the project hub repo. Default: personal GitHub account — press Enter to accept. Example: For "EverPlan", org `EverPlanHQ` → all repos live under `github.com/EverPlanHQ/`.
 - pm-os scaffold GitHub URL (default: `https://github.com/amit-t/pm-os` — press Enter to accept)
 - doe-os scaffold GitHub URL (default: `https://github.com/amit-t/doe-os` — press Enter to accept)
 - Main app GitHub URL — optional, leave blank to skip cloning
@@ -55,6 +79,18 @@ DOEOS_DIR  = {ROOT_DIR}/engineering/{project_slug}-doe-os
 APP_DIR    = {ROOT_DIR}/engineering/{project_slug}-app   (only if app URL given)
 ```
 
+**GitHub org**:
+- `GITHUB_ORG` = the GitHub org or username provided (may be empty → personal account)
+- This is used for ALL repos: forks (pm-os, doe-os, app) AND the project hub repo
+- If `GITHUB_ORG` is set: hub repo will be `{GITHUB_ORG}/{project_name}`, forks go under `{GITHUB_ORG}/`
+- If empty: everything goes under the user's personal GitHub account
+- Derive a short **alias prefix** from the project name (2-3 lowercase letters). Examples: "EverPlan" → `ep`, "BabbleAI" → `ba`, "TaskFlow" → `tf`, "My App" → `ma`
+
+**Architecture**:
+- `ARCH_PATTERN` = the chosen architecture pattern name (e.g. "Clean Architecture", "Feature-Based")
+- `ARCH_FOLDER_LAYOUT` = the example folder layout string from the table (e.g. `src/{domain,application,infrastructure,presentation}/`)
+- These are used in the bootstrap PRD (Step 3.15) and threaded into CLAUDE.md / MEMORY.md
+
 **Claude memory path**:
 - Take ROOT_DIR as an absolute path
 - Replace every `/` with `-` (drop the leading `-`)
@@ -75,23 +111,70 @@ mkdir -p {ROOT_DIR}/tools
 ```
 
 ### 3.2 — Fork pm-os scaffold
+If `GITHUB_ORG` is set:
+```bash
+gh repo fork {pmos_url} --clone --remote --fork-name {project_slug}-pm-os --org {GITHUB_ORG}
+```
+If no org (personal account):
 ```bash
 gh repo fork {pmos_url} --clone --remote --fork-name {project_slug}-pm-os
+```
+Then move into place:
+```bash
 mv {project_slug}-pm-os {PMOS_DIR}
 ```
 
 ### 3.3 — Fork doe-os scaffold
+If `GITHUB_ORG` is set:
+```bash
+gh repo fork {doeos_url} --clone --remote --fork-name {project_slug}-doe-os --org {GITHUB_ORG}
+```
+If no org (personal account):
 ```bash
 gh repo fork {doeos_url} --clone --remote --fork-name {project_slug}-doe-os
+```
+Then move into place:
+```bash
 mv {project_slug}-doe-os {DOEOS_DIR}
 ```
 
 ### 3.4 — Fork app repo (only if URL was provided)
 `{app_repo_name}` = the last path segment of `{app_url}` (e.g. `https://github.com/org/my-app` → `my-app`)
+If `GITHUB_ORG` is set:
+```bash
+gh repo fork {app_url} --clone --remote --org {GITHUB_ORG}
+```
+If no org (personal account):
 ```bash
 gh repo fork {app_url} --clone --remote
+```
+Then move into place:
+```bash
 mv {app_repo_name} {APP_DIR}
 ```
+
+### 3.5 — Initialize ROOT_DIR as a git project
+
+The root directory is the **project management hub**. It must be its own git repo (separate from the forked sub-repos in `engineering/` and `product/`).
+
+```bash
+cd {ROOT_DIR}
+git init -b main
+```
+
+### 3.6 — Create .gitignore
+
+Write `{ROOT_DIR}/.gitignore`:
+
+```
+.DS_Store
+
+# Managed as separate git repos (forked independently)
+engineering/
+product/
+```
+
+This ensures the hub repo only tracks root-level management files (CLAUDE.md, PRD-PIPELINE.md, aliases, tools/, etc.) and does NOT track the sub-repos which have their own git history from the forks.
 
 ### 3.7 — Create approved PRDs gate folder
 ```bash
@@ -172,6 +255,13 @@ Update it at the end of every session.
 - Database: {database}
 - Cloud: {cloud}
 {stack_notes_line}
+
+## Architecture
+
+- Pattern: {ARCH_PATTERN}
+- Folder layout: `{ARCH_FOLDER_LAYOUT}`
+
+All new code and scaffold PRDs must follow this architecture. When creating new features, modules, or services, use the folder structure prescribed by this pattern.
 ```
 
 ### 3.9 — Generate PRD-PIPELINE.md
@@ -201,6 +291,7 @@ Tracks every PRD from writing → engineering spec → fix_plan → execution �
 
 | # | Feature | PRD | Spec (DOE OS) | fix_plan | Execution | Notes |
 |---|---------|-----|---------------|----------|-----------|-------|
+| 1 | App Bootstrap & Scaffold | ✓ PRD-001 (approved) | — | — | — | Auto-generated by boot-app. {ARCH_PATTERN} architecture. |
 
 ---
 
@@ -447,6 +538,12 @@ Target: {target_market}. Team: {team_size} people.
 - Cloud: {cloud}
 {stack_notes_line}
 
+## Architecture
+
+- Pattern: {ARCH_PATTERN}
+- Folder layout: `{ARCH_FOLDER_LAYOUT}`
+- All new code must follow this pattern. When scaffolding features, use the prescribed folder structure.
+
 ## Active PRDs
 (none yet — add as PRDs are written)
 
@@ -455,6 +552,134 @@ Target: {target_market}. Team: {team_size} people.
 
 ## fix_plan.md Status
 Not yet initialised — run `rpc.plan` after first PRD + spec are written and synced.
+```
+
+### 3.13 — Create aliases.sh
+
+Write `{ROOT_DIR}/aliases.sh`, using the alias prefix computed in Step 2:
+
+```bash
+#!/usr/bin/env bash
+# {project_name} CLI aliases
+# Source this file in your .bashrc / .zshrc / .bash_profile:
+#   source {ROOT_DIR}/aliases.sh
+
+{ALIAS_PREFIX}_APP="{APP_DIR}"
+
+# Sync approved PRDs + doe-os specs into ralph's inbox
+#   Runs sync-doe-prd-outputs.zsh from {project_slug}-app/
+{alias_prefix}.sync() { (cd "${{{ALIAS_PREFIX}_APP}}" && ./ai/sync-doe-prd-outputs.zsh "$@"); }
+```
+
+Where `{ALIAS_PREFIX}` is the uppercase version of the alias prefix (e.g. `EP` for EverPlan), and `{alias_prefix}` is lowercase (e.g. `ep`).
+
+If no app URL was provided, comment out the alias with a note: `# Uncomment and set {ALIAS_PREFIX}_APP when you add your app repo`
+
+### 3.14 — Create GitHub repo, initial commit and push
+
+```bash
+cd {ROOT_DIR}
+git add .
+git commit -m "feat: initialize {project_name} project management hub with PM OS and DOE OS planning layer"
+```
+
+Create the GitHub repo:
+- If `GITHUB_ORG` is set (org or username): `gh repo create {GITHUB_ORG}/{project_name} --private --source . --remote origin --push`
+- If no org specified: `gh repo create {project_name} --private --source . --remote origin --push`
+
+This creates a **private** repo by default and pushes the initial commit with all hub files (.gitignore, CLAUDE.md, PRD-PIPELINE.md, aliases.sh, tools/).
+
+### 3.15 — Generate first PRD: App Bootstrap & Scaffold
+
+Write a complete PRD to `{PMOS_DIR}/outputs/prds/PRD-001-app-bootstrap.md` that describes scaffolding the app with the chosen tech stack and architecture pattern. This is the **first PRD** so the team can immediately run `rpc.plan` after setup.
+
+The PRD must be written in the pm-os PRD format (check if `{PMOS_DIR}` has a PRD template — if so, follow it; otherwise use the structure below).
+
+Write the following to `{PMOS_DIR}/outputs/prds/PRD-001-app-bootstrap.md`, substituting all `{placeholders}`:
+
+```markdown
+# PRD-001: {project_name} App Bootstrap & Scaffold
+
+**Status:** Draft
+**Author:** AI App BIOS (auto-generated)
+**Created:** {today_date}
+**Priority:** P0 — Must be done first
+
+---
+
+## 1. Problem Statement
+
+The {project_name} project has been initialised with PM OS and DOE OS, but the application codebase (`engineering/{project_slug}-app/`) needs to be scaffolded with the correct tech stack, architecture pattern, and folder structure before any feature work can begin.
+
+## 2. Goal
+
+Set up a production-ready project scaffold for **{project_name}** that:
+- Implements the **{ARCH_PATTERN}** architecture pattern
+- Uses the agreed tech stack end-to-end
+- Includes working dev server, build pipeline, linting, and test runner
+- Follows the prescribed folder layout from day one
+- Is ready for the first feature PRD to build on
+
+## 3. Tech Stack
+
+| Layer | Choice |
+|-------|--------|
+| Frontend | {frontend} |
+| Backend | {backend} |
+| Database | {database} |
+| Cloud / Infra | {cloud} |
+| Architecture | {ARCH_PATTERN} |
+{stack_notes_table_row}
+
+## 4. Architecture & Folder Structure
+
+**Pattern:** {ARCH_PATTERN}
+
+**Target folder layout:**
+```
+{ARCH_FOLDER_LAYOUT}
+```
+
+### What each layer/folder is for:
+
+(Generate 3–5 bullet points explaining the purpose of each top-level folder in the chosen architecture pattern. Tailor these to the specific tech stack chosen.)
+
+## 5. Acceptance Criteria
+
+- [ ] Project initialised with package manager (e.g. `pnpm init`, `bun init`, `npm init`)
+- [ ] Folder structure matches the {ARCH_PATTERN} layout above
+- [ ] Frontend scaffolded with {frontend} — dev server starts and renders a hello-world page
+- [ ] Backend scaffolded with {backend} — server starts and responds to a health-check endpoint (`GET /health`)
+- [ ] Database connection configured for {database} (connection tested, migrations folder created)
+- [ ] Linting & formatting configured (ESLint / Prettier or language equivalent)
+- [ ] Test runner configured and one example test passes per layer (frontend + backend)
+- [ ] Build pipeline works (`build` script produces production output)
+- [ ] Environment variables managed via `.env` / `.env.example` (no secrets committed)
+- [ ] README.md written with: project overview, tech stack, dev setup instructions, and folder structure explanation
+- [ ] `.gitignore` appropriate for the stack (node_modules, dist, .env, etc.)
+
+## 6. Out of Scope
+
+- User authentication / authorization (separate PRD)
+- CI/CD pipeline setup (separate PRD)
+- Production deployment (separate PRD)
+- Feature-specific business logic
+
+## 7. Dependencies
+
+- This PRD has no dependencies — it is the first PRD.
+- All subsequent PRDs depend on this scaffold being complete.
+
+## 8. Notes
+
+This PRD was auto-generated by AI App BIOS during project setup. Review and adjust acceptance criteria before approving.
+```
+
+Where `{stack_notes_table_row}` is either `| Additional | {stack_notes} |` if stack notes were provided, or omitted if blank.
+
+After writing the PRD, also copy it to the approved folder so it's immediately ready for `rpc.plan`:
+```bash
+cp {PMOS_DIR}/outputs/prds/PRD-001-app-bootstrap.md {PMOS_DIR}/outputs/prds/approved/PRD-001-app-bootstrap.md
 ```
 
 ---
@@ -466,26 +691,33 @@ Print a clean summary of what was created:
 ```
 ── Setup Complete ─────────────────────────────────────
 
-  ✓ Root:          {ROOT_DIR}
+  ✓ Root (hub):     {ROOT_DIR}
+  ✓ GitHub repo:    {hub_repo_url}  (private)
   ✓ pm-os:         {PMOS_DIR}
   ✓ doe-os:        {DOEOS_DIR}
   ✓ App:           {APP_DIR}  (or "not forked — add later")
   ✓ Sync scripts:  {sync_target}
   ✓ Claude memory: {memory_dir}
+  ✓ .gitignore:    engineering/ and product/ excluded (separate repos)
+  ✓ aliases.sh:    source {ROOT_DIR}/aliases.sh
+  ✓ Architecture:  {ARCH_PATTERN}
+  ✓ First PRD:     PRD-001-app-bootstrap.md (approved, ready for rpc.plan)
 
 ── Next Steps ──────────────────────────────────────────
 
-  1. Open Claude Code in {ROOT_DIR}
-  2. Fill in pm-os context library:
-       {PMOS_DIR}/context-library/
-  3. Write your first PRD:
-       cd {PMOS_DIR} && /prd-draft
-  4. Write the engineering spec in doe-os:
+  1. Add aliases to your shell:
+       echo 'source {ROOT_DIR}/aliases.sh' >> ~/.zshrc && source ~/.zshrc
+  2. Open Claude Code in {ROOT_DIR}
+  3. Review the bootstrap PRD:
+       {PMOS_DIR}/outputs/prds/PRD-001-app-bootstrap.md
+  4. Write the engineering spec for PRD-001:
        {DOEOS_DIR}/outputs/specs/
-  5. When PRD is approved → copy to pm-os/outputs/prds/approved/
-  6. Run ./ai/sync-all.zsh then rpc.plan
+  5. Sync + plan:
+       ./ai/sync-all.zsh && rpc.plan
+  6. Build:
+       rpc.int
 
-  Happy building.
+  Your first PRD is ready — write the engineering spec and you can start building.
 ```
 
 If the app was not forked, add a note: "Sync scripts are in {ROOT_DIR}/tools/ — move them to your app's ai/ folder when you create it."
