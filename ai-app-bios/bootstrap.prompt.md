@@ -53,9 +53,10 @@ After they pick, confirm: "I'll use **{pattern}** for the folder scaffold struct
 
 ### Section 3 — Repositories & GitHub Org
 Ask these together:
-- **GitHub org or username** under which ALL repos will be created — forks (pm-os, doe-os, app) and the project hub repo. Default: personal GitHub account — press Enter to accept. Example: For "EverPlan", org `EverPlanHQ` → all repos live under `github.com/EverPlanHQ/`.
-- pm-os scaffold GitHub URL (default: `https://github.com/amit-t/pm-os` — press Enter to accept)
-- doe-os scaffold GitHub URL (default: `https://github.com/amit-t/doe-os` — press Enter to accept)
+- **GitHub org or username** under which ALL repos will be created — forks (app-hq, pm-os, doe-os, app) and the project hub repo. Default: personal GitHub account — press Enter to accept. Example: For "EverPlan", org `EverPlanHQ` → all repos live under `github.com/EverPlanHQ/`.
+- app-hq (project hub) GitHub URL (default: `https://github.com/AppIncubatorHQ/app-hq` — press Enter to accept)
+- pm-os scaffold GitHub URL (default: `https://github.com/AppIncubatorHQ/pm-os` — press Enter to accept)
+- doe-os scaffold GitHub URL (default: `https://github.com/AppIncubatorHQ/doe-os` — press Enter to accept)
 - Main app GitHub URL — optional, leave blank to skip cloning
 
 ### Section 4 — Confirm
@@ -71,9 +72,9 @@ Before writing anything, compute these internally:
 
 **project_slug**: lowercase, hyphens only. Examples: "EverPlan" → `everplan`, "My App" → `my-app`, "BabbleAI" → `babbleai`
 
-**Directories** (using the install directory passed at the bottom of this prompt, or the user's answer if they want somewhere else):
+**Directories** (the install directory passed at the bottom of this prompt is ROOT_DIR — the current working directory where boot-app was run. Do NOT create a subdirectory named after the project; set up everything directly inside this directory):
 ```
-ROOT_DIR   = {install_dir}/{project_slug}
+ROOT_DIR   = {install_dir}
 PMOS_DIR   = {ROOT_DIR}/product/{project_slug}-pm-os
 DOEOS_DIR  = {ROOT_DIR}/engineering/{project_slug}-doe-os
 APP_DIR    = {ROOT_DIR}/engineering/{project_slug}-app   (only if app URL given)
@@ -103,7 +104,32 @@ APP_DIR    = {ROOT_DIR}/engineering/{project_slug}-app   (only if app URL given)
 
 Run these steps in order. Announce each step as you go ("Setting up pm-os...", etc.).
 
-### 3.1 — Create root directories
+### 3.1 — Fork app-hq into ROOT_DIR and create subdirectories
+
+ROOT_DIR is the current working directory (the install directory). Fork the app-hq repo to create the project hub. **Do NOT create an `app-hq` subdirectory** — initialize the fork directly inside ROOT_DIR.
+
+**Fork on GitHub (no clone):**
+If `GITHUB_ORG` is set:
+```bash
+gh repo fork {apphq_url} --fork-name {project_name} --org {GITHUB_ORG} --clone=false
+```
+If no org (personal account):
+```bash
+gh repo fork {apphq_url} --fork-name {project_name} --clone=false
+```
+
+**Then set up ROOT_DIR as the fork's local clone:**
+```bash
+cd {ROOT_DIR}
+git init -b main
+git remote add origin https://github.com/{GITHUB_ORG_OR_USER}/{project_name}.git
+git remote add upstream {apphq_url}
+git fetch origin
+git reset --hard origin/main
+```
+Where `{GITHUB_ORG_OR_USER}` is the GitHub org (if set) or the user's GitHub username (obtain via `gh api user -q .login`).
+
+**Create project subdirectories:**
 ```bash
 mkdir -p {ROOT_DIR}/product
 mkdir -p {ROOT_DIR}/engineering
@@ -153,14 +179,9 @@ Then move into place:
 mv {app_repo_name} {APP_DIR}
 ```
 
-### 3.5 — Initialize ROOT_DIR as a git project
+### 3.5 — (Handled by Step 3.1)
 
-The root directory is the **project management hub**. It must be its own git repo (separate from the forked sub-repos in `engineering/` and `product/`).
-
-```bash
-cd {ROOT_DIR}
-git init -b main
-```
+ROOT_DIR was already initialized as a git repo and connected to the app-hq fork in Step 3.1. No additional git initialization is needed.
 
 ### 3.6 — Create .gitignore
 
@@ -575,19 +596,18 @@ Where `{ALIAS_PREFIX}` is the uppercase version of the alias prefix (e.g. `EP` f
 
 If no app URL was provided, comment out the alias with a note: `# Uncomment and set {ALIAS_PREFIX}_APP when you add your app repo`
 
-### 3.14 — Create GitHub repo, initial commit and push
+### 3.14 — Commit and push to app-hq fork
+
+The GitHub repo already exists as a fork of app-hq (created in Step 3.1). Commit the generated files and push:
 
 ```bash
 cd {ROOT_DIR}
 git add .
 git commit -m "feat: initialize {project_name} project management hub with PM OS and DOE OS planning layer"
+git push origin main
 ```
 
-Create the GitHub repo:
-- If `GITHUB_ORG` is set (org or username): `gh repo create {GITHUB_ORG}/{project_name} --private --source . --remote origin --push`
-- If no org specified: `gh repo create {project_name} --private --source . --remote origin --push`
-
-This creates a **private** repo by default and pushes the initial commit with all hub files (.gitignore, CLAUDE.md, PRD-PIPELINE.md, aliases.sh, tools/).
+This pushes all hub files (.gitignore, CLAUDE.md, PRD-PIPELINE.md, aliases.sh, tools/) to the forked repo.
 
 ### 3.15 — Generate first PRD: App Bootstrap & Scaffold
 
@@ -692,7 +712,7 @@ Print a clean summary of what was created:
 ── Setup Complete ─────────────────────────────────────
 
   ✓ Root (hub):     {ROOT_DIR}
-  ✓ GitHub repo:    {hub_repo_url}  (private)
+  ✓ GitHub repo:    {hub_repo_url}  (fork of app-hq)
   ✓ pm-os:         {PMOS_DIR}
   ✓ doe-os:        {DOEOS_DIR}
   ✓ App:           {APP_DIR}  (or "not forked — add later")

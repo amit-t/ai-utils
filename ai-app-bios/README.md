@@ -7,19 +7,19 @@ One command to scaffold a new project with pm-os + doe-os + the full planning la
 `boot-app` is a thin launcher. It fires a `cly` (Claude bypass-permissions) session with a comprehensive prompt (`bootstrap.prompt.md`) that tells Claude to:
 
 1. **Interview you** about the project (name, stack, architecture, repos, GitHub org)
-2. **Fork** pm-os and doe-os scaffolds under your GitHub org (and optionally your app repo)
-3. **Initialize** the root directory as its own git repo with proper `.gitignore`
+2. **Fork** app-hq (project hub), pm-os and doe-os scaffolds under your GitHub org (and optionally your app repo)
+3. **Set up** the root directory as a local clone of the app-hq fork with proper `.gitignore`
 4. **Generate** root CLAUDE.md, PRD-PIPELINE.md, sync scripts, aliases.sh
 5. **Write** Claude auto-memory to `~/.claude/projects/.../memory/`
-6. **Create** a private GitHub repo for the hub and push the initial commit
+6. **Push** the generated files to the app-hq fork
 7. **Generate** the first PRD (app bootstrap & scaffold) with your chosen architecture and tech stack
 
-The root directory becomes a **project management hub** — a separate git repo that tracks only planning files while `engineering/` and `product/` sub-repos are gitignored (they have their own git history from forks).
+The root directory becomes a **project management hub** — a fork of app-hq that tracks only planning files while `engineering/` and `product/` sub-repos are gitignored (they have their own git history from forks).
 
 ## What gets created
 
 ```
-{project-slug}/                         ← git repo (project management hub)
+{project-slug}/                         ← fork of app-hq (project management hub)
   .gitignore                            ← excludes engineering/ and product/
   CLAUDE.md                             ← plan-mode rules, workflow, ralph CLI ref
   PRD-PIPELINE.md                       ← PRD → spec → fix_plan tracker (pre-filled with PRD-001)
@@ -42,7 +42,7 @@ The root directory becomes a **project management hub** — a separate git repo 
 ## Requirements
 
 - `claude` CLI installed
-- `gh` CLI installed and authenticated (for forking repos and creating the hub repo)
+- `gh` CLI installed and authenticated (for forking repos)
 - `git` installed
 - `rsync` installed
 
@@ -61,11 +61,12 @@ This creates a symlink at `~/.local/bin/boot-app` and adds an alias to `~/.zshrc
 ## Usage
 
 ```zsh
-# From any directory — Claude will install the project here
+# Create an empty directory for the project, then run boot-app from inside it
+mkdir ~/Projects/my-project && cd ~/Projects/my-project
 boot-app
 
-# Specify the install directory explicitly
-boot-app ${HOME}/Projects/Tools-Utilities/ai-utils
+# Or specify the install directory explicitly
+boot-app ${HOME}/Projects/my-project
 ```
 
 ## Interview questions Claude will ask
@@ -83,8 +84,9 @@ boot-app ${HOME}/Projects/Tools-Utilities/ai-utils
 | Stack notes | Drizzle ORM, Redis, pnpm monorepo |
 | Architecture pattern | Clean Architecture, Feature-Based, Hexagonal, etc. |
 | GitHub org / username | BabbleAIHQ (used for all forks + hub repo) |
-| pm-os scaffold URL | https://github.com/amit-t/pm-os |
-| doe-os scaffold URL | https://github.com/amit-t/doe-os |
+| app-hq (project hub) URL | https://github.com/AppIncubatorHQ/app-hq |
+| pm-os scaffold URL | https://github.com/AppIncubatorHQ/pm-os |
+| doe-os scaffold URL | https://github.com/AppIncubatorHQ/doe-os |
 | App repo URL | https://github.com/your-org/your-app (optional) |
 
 ## After setup — workflow
@@ -102,5 +104,6 @@ boot-app ${HOME}/Projects/Tools-Utilities/ai-utils
 
 ## Scaffolds used
 
-- **pm-os**: https://github.com/amit-t/pm-os
-- **doe-os**: https://github.com/amit-t/doe-os
+- **app-hq**: https://github.com/AppIncubatorHQ/app-hq
+- **pm-os**: https://github.com/AppIncubatorHQ/pm-os
+- **doe-os**: https://github.com/AppIncubatorHQ/doe-os

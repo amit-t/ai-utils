@@ -24,7 +24,7 @@ WORKING_DIR="${1:-$(pwd)}"
 FULL_PROMPT="$(cat "$PROMPT_FILE")
 
 ---
-Bootstrap context: Install the new project in this directory: ${WORKING_DIR}
+Bootstrap context: Set up the project directly in this directory (ROOT_DIR): ${WORKING_DIR}
 "
 
 claude --dangerously-skip-permissions "$FULL_PROMPT"
