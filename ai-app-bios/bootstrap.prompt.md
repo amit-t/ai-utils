@@ -575,15 +575,14 @@ Target: {target_market}. Team: {team_size} people.
 Not yet initialised — run `rpc.plan` after first PRD + spec are written and synced.
 ```
 
-### 3.13 — Create aliases.sh
+### 3.13 — Create aliases.sh and register it in ~/Profiles/.zprofile
 
 Write `{ROOT_DIR}/aliases.sh`, using the alias prefix computed in Step 2:
 
 ```bash
 #!/usr/bin/env bash
 # {project_name} CLI aliases
-# Source this file in your .bashrc / .zshrc / .bash_profile:
-#   source {ROOT_DIR}/aliases.sh
+# Auto-sourced from ~/Profiles/.zprofile — do not source manually.
 
 {ALIAS_PREFIX}_APP="{APP_DIR}"
 
@@ -595,6 +594,36 @@ Write `{ROOT_DIR}/aliases.sh`, using the alias prefix computed in Step 2:
 Where `{ALIAS_PREFIX}` is the uppercase version of the alias prefix (e.g. `EP` for EverPlan), and `{alias_prefix}` is lowercase (e.g. `ep`).
 
 If no app URL was provided, comment out the alias with a note: `# Uncomment and set {ALIAS_PREFIX}_APP when you add your app repo`
+
+After writing the file, register it in `~/Profiles/.zprofile` under the EXTERNAL PROJECT ALIASES section:
+
+```bash
+ZPROFILE="${HOME}/Profiles/.zprofile"
+SOURCE_LINE="source {ROOT_DIR}/aliases.sh"
+
+# Check the section exists; if not, append it
+if ! grep -qF "EXTERNAL PROJECT ALIASES" "$ZPROFILE" 2>/dev/null; then
+  printf "\n# =============================================================================\n" >> "$ZPROFILE"
+  printf "# EXTERNAL PROJECT ALIASES\n" >> "$ZPROFILE"
+  printf "# =============================================================================\n" >> "$ZPROFILE"
+fi
+
+# Only add the source line if not already present
+if ! grep -qF "$SOURCE_LINE" "$ZPROFILE" 2>/dev/null; then
+  # Insert after the EXTERNAL PROJECT ALIASES header line
+  # Use a temp file to insert cleanly after the section header
+  awk -v line="$SOURCE_LINE" '
+    /# EXTERNAL PROJECT ALIASES/ { print; getline; print; print line; next }
+    { print }
+  ' "$ZPROFILE" > "${ZPROFILE}.tmp" && mv "${ZPROFILE}.tmp" "$ZPROFILE"
+fi
+```
+
+If `~/Profiles/.zprofile` does not exist, create it first:
+```bash
+mkdir -p "${HOME}/Profiles"
+touch "${HOME}/Profiles/.zprofile"
+```
 
 ### 3.14 — Commit and push to app-hq fork
 
@@ -719,14 +748,14 @@ Print a clean summary of what was created:
   ✓ Sync scripts:  {sync_target}
   ✓ Claude memory: {memory_dir}
   ✓ .gitignore:    engineering/ and product/ excluded (separate repos)
-  ✓ aliases.sh:    source {ROOT_DIR}/aliases.sh
+  ✓ aliases.sh:    registered in ~/Profiles/.zprofile (EXTERNAL PROJECT ALIASES section)
   ✓ Architecture:  {ARCH_PATTERN}
   ✓ First PRD:     PRD-001-app-bootstrap.md (approved, ready for rpc.plan)
 
 ── Next Steps ──────────────────────────────────────────
 
-  1. Add aliases to your shell:
-       echo 'source {ROOT_DIR}/aliases.sh' >> ~/.zshrc && source ~/.zshrc
+  1. Reload your shell to activate the project aliases:
+       source ~/Profiles/.zprofile
   2. Open Claude Code in {ROOT_DIR}
   3. Review the bootstrap PRD:
        {PMOS_DIR}/outputs/prds/PRD-001-app-bootstrap.md
