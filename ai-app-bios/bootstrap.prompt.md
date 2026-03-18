@@ -104,6 +104,45 @@ APP_DIR    = {ROOT_DIR}/engineering/{project_slug}-app   (only if app URL given)
 
 Run these steps in order. Announce each step as you go ("Setting up pm-os...", etc.).
 
+### Pre-flight: Detect GitHub auth mode
+
+Before running any `gh` or `git` commands, check the active GitHub auth configuration:
+
+```bash
+gh auth status
+```
+
+Look at the output:
+- If it shows `Logged in to github.com` with **HTTPS** — use `https://github.com/` URLs for all `git clone` and `git remote add` commands.
+- If it shows a **custom hostname** (e.g. `github.com-at`, `git.example.com`) or **SSH** protocol, use SSH URLs instead: `git@{hostname}:{owner}/{repo}.git`
+
+**How to detect the correct SSH hostname:**
+```bash
+# Check for custom SSH host aliases in ~/.ssh/config
+grep -A5 "Host github" ~/.ssh/config 2>/dev/null || echo "No custom SSH host config found"
+# Check which hostname gh is using
+gh auth status 2>&1 | grep -E "Logged in|hostname|Token"
+```
+
+If a custom SSH hostname (e.g. `github.com-at`) is configured in `~/.ssh/config` with a specific identity file, all git clone and remote URLs must use that hostname. For example, if `~/.ssh/config` has:
+```
+Host github.com-at
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_rsa_work
+```
+Then all git URLs must use `git@github.com-at:{owner}/{repo}.git` instead of `https://github.com/{owner}/{repo}.git`.
+
+**Store the correct URL prefix for use in all subsequent steps:**
+```bash
+# Set GIT_URL_PREFIX based on auth mode:
+# HTTPS:  GIT_URL_PREFIX="https://github.com"
+# SSH:    GIT_URL_PREFIX="git@github.com"      (standard)
+# SSH+alias: GIT_URL_PREFIX="git@{ssh_hostname}"  (custom alias, e.g. git@github.com-at)
+```
+
+Use `${GIT_URL_PREFIX}/{GITHUB_ORG_OR_USER}/{repo}.git` for ALL `git clone` and `git remote add origin` commands in the steps below.
+
 ### 3.1 — Fork app-hq into ROOT_DIR and create subdirectories
 
 ROOT_DIR is the current working directory (the install directory). Fork the app-hq repo to create the project hub. **Do NOT create an `app-hq` subdirectory** — initialize the fork directly inside ROOT_DIR.
@@ -119,15 +158,42 @@ gh repo fork {apphq_url} --fork-name {project_name} --clone=false
 ```
 
 **Then set up ROOT_DIR as the fork's local clone:**
+
+`{GITHUB_ORG_OR_USER}` is the GitHub org (if set) or the user's GitHub username (obtain via `gh api user -q .login`).
+
+```bash
+FORK_URL="${GIT_URL_PREFIX}/{GITHUB_ORG_OR_USER}/{project_name}.git"
+
+# Clone fork into a temp dir, then move .git into ROOT_DIR
+TMP_CLONE=$(mktemp -d)
+git clone "$FORK_URL" "$TMP_CLONE"
+mv "$TMP_CLONE/.git" "{ROOT_DIR}/.git"
+rm -rf "$TMP_CLONE"
+
+# ROOT_DIR is now a git repo tracking the fork; add upstream
+cd {ROOT_DIR}
+git remote add upstream {apphq_url}
+
+# Merge fork content — use --allow-unrelated-histories in case ROOT_DIR had existing files
+git merge origin/main --allow-unrelated-histories -m "chore: initialize from app-hq fork" 2>/dev/null || true
+```
+
+Verify the setup worked:
+```bash
+cd {ROOT_DIR}
+git remote -v          # should show origin = fork URL and upstream = apphq_url
+git log --oneline -3   # should show app-hq commits
+```
+
+If `git remote -v` shows no remotes or `git log` shows no commits, the git init failed. In that case, fall back to:
 ```bash
 cd {ROOT_DIR}
 git init -b main
-git remote add origin https://github.com/{GITHUB_ORG_OR_USER}/{project_name}.git
+git remote add origin "$FORK_URL"
 git remote add upstream {apphq_url}
-git fetch origin
-git reset --hard origin/main
+git fetch origin main
+git checkout -B main --track origin/main
 ```
-Where `{GITHUB_ORG_OR_USER}` is the GitHub org (if set) or the user's GitHub username (obtain via `gh api user -q .login`).
 
 **Create project subdirectories:**
 ```bash
@@ -137,46 +203,56 @@ mkdir -p {ROOT_DIR}/tools
 ```
 
 ### 3.2 — Fork pm-os scaffold
+
+Fork on GitHub (no clone), then clone explicitly so the destination is correct:
+
 If `GITHUB_ORG` is set:
 ```bash
-gh repo fork {pmos_url} --clone --remote --fork-name {project_slug}-pm-os --org {GITHUB_ORG}
+gh repo fork {pmos_url} --fork-name {project_slug}-pm-os --org {GITHUB_ORG} --clone=false
 ```
 If no org (personal account):
 ```bash
-gh repo fork {pmos_url} --clone --remote --fork-name {project_slug}-pm-os
+gh repo fork {pmos_url} --fork-name {project_slug}-pm-os --clone=false
 ```
-Then move into place:
+Then clone into place:
 ```bash
-mv {project_slug}-pm-os {PMOS_DIR}
+mkdir -p {ROOT_DIR}/product
+git clone "${GIT_URL_PREFIX}/{GITHUB_ORG_OR_USER}/{project_slug}-pm-os.git" {PMOS_DIR}
+cd {PMOS_DIR}
+git remote add upstream {pmos_url}
 ```
 
 ### 3.3 — Fork doe-os scaffold
+
+Fork on GitHub (no clone), then clone explicitly so the destination is correct:
+
 If `GITHUB_ORG` is set:
 ```bash
-gh repo fork {doeos_url} --clone --remote --fork-name {project_slug}-doe-os --org {GITHUB_ORG}
+gh repo fork {doeos_url} --fork-name {project_slug}-doe-os --org {GITHUB_ORG} --clone=false
 ```
 If no org (personal account):
 ```bash
-gh repo fork {doeos_url} --clone --remote --fork-name {project_slug}-doe-os
+gh repo fork {doeos_url} --fork-name {project_slug}-doe-os --clone=false
 ```
-Then move into place:
+Then clone into place:
 ```bash
-mv {project_slug}-doe-os {DOEOS_DIR}
+mkdir -p {ROOT_DIR}/engineering
+git clone "${GIT_URL_PREFIX}/{GITHUB_ORG_OR_USER}/{project_slug}-doe-os.git" {DOEOS_DIR}
+cd {DOEOS_DIR}
+git remote add upstream {doeos_url}
 ```
 
 ### 3.4 — Fork app repo (only if URL was provided)
 `{app_repo_name}` = the last path segment of `{app_url}` (e.g. `https://github.com/org/my-app` → `my-app`)
 If `GITHUB_ORG` is set:
 ```bash
-gh repo fork {app_url} --clone --remote --org {GITHUB_ORG}
+gh repo fork {app_url} --org {GITHUB_ORG} --clone=false
+git clone "${GIT_URL_PREFIX}/{GITHUB_ORG_OR_USER}/{app_repo_name}.git" {APP_DIR}
 ```
 If no org (personal account):
 ```bash
-gh repo fork {app_url} --clone --remote
-```
-Then move into place:
-```bash
-mv {app_repo_name} {APP_DIR}
+gh repo fork {app_url} --clone=false
+git clone "${GIT_URL_PREFIX}/{GITHUB_ORG_OR_USER}/{app_repo_name}.git" {APP_DIR}
 ```
 
 ### 3.5 — (Handled by Step 3.1)
@@ -729,6 +805,33 @@ Where `{stack_notes_table_row}` is either `| Additional | {stack_notes} |` if st
 After writing the PRD, also copy it to the approved folder so it's immediately ready for `rpc.plan`:
 ```bash
 cp {PMOS_DIR}/outputs/prds/PRD-001-app-bootstrap.md {PMOS_DIR}/outputs/prds/approved/PRD-001-app-bootstrap.md
+```
+
+### 3.16 — Commit and push pm-os and doe-os changes
+
+**Commit and push pm-os** (business info pre-fill + PRD-001 were written locally):
+```bash
+cd {PMOS_DIR}
+git add .
+git status
+git diff --quiet && git diff --cached --quiet || \
+  git commit -m "feat: initialize {project_slug}-pm-os with project context and PRD-001-app-bootstrap"
+git push origin main
+```
+
+**Commit and push doe-os** (initial setup; push even if no local changes to confirm remote is reachable):
+```bash
+cd {DOEOS_DIR}
+git add .
+git diff --quiet && git diff --cached --quiet || \
+  git commit -m "feat: initialize {project_slug}-doe-os for {project_name}"
+git push origin main
+```
+
+Verify both pushes succeeded:
+```bash
+echo "pm-os remote:" && git -C {PMOS_DIR} remote -v | head -2
+echo "doe-os remote:" && git -C {DOEOS_DIR} remote -v | head -2
 ```
 
 ---
