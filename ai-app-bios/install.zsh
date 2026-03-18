@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 # install.zsh — Install ai-app-bios tools as global commands.
-# Installs: boot-app, sync-os
+# Installs: boot-app, sync-os, update-os
 # Usage: ./install.zsh
 # Run once from the ai-app-bios directory.
 
@@ -50,6 +50,31 @@ else
   printf "✓ Added alias to ~/.zshrc: sync.os.dev\n"
 fi
 
+# ─── update-os ─────────────────────────────────────────────────────────────────
+UPDATE_TARGET="${BIN_DIR}/update-os"
+ln -sf "${SCRIPT_DIR}/update-os.zsh" "$UPDATE_TARGET"
+chmod +x "${SCRIPT_DIR}/update-os.zsh" "$UPDATE_TARGET"
+printf "✓ Installed: %s → %s\n" "$UPDATE_TARGET" "${SCRIPT_DIR}/update-os.zsh"
+
+# update.os     → Claude Code yolo mode  (non-interactive, dangerously-skip-permissions)
+# update.os.dev → Devin bypass mode      (interactive, --permission-mode dangerous)
+UPDATE_ALIAS_CLY="alias update.os='${SCRIPT_DIR}/update-os.zsh --cly'"
+UPDATE_ALIAS_DEV="alias update.os.dev='${SCRIPT_DIR}/update-os.zsh --dev'"
+
+if grep -qF "alias update.os=" "${HOME}/.zshrc" 2>/dev/null; then
+  printf "✓ Alias already in ~/.zshrc: update.os\n"
+else
+  printf "\n%s\n" "$UPDATE_ALIAS_CLY" >> "${HOME}/.zshrc"
+  printf "✓ Added alias to ~/.zshrc: update.os\n"
+fi
+
+if grep -qF "alias update.os.dev=" "${HOME}/.zshrc" 2>/dev/null; then
+  printf "✓ Alias already in ~/.zshrc: update.os.dev\n"
+else
+  printf "%s\n" "$UPDATE_ALIAS_DEV" >> "${HOME}/.zshrc"
+  printf "✓ Added alias to ~/.zshrc: update.os.dev\n"
+fi
+
 # ─── PATH check ────────────────────────────────────────────────────────────────
 if ! echo "$PATH" | tr ':' '\n' | grep -qx "${BIN_DIR}"; then
   printf "\n⚠  %s is not in your PATH.\n" "$BIN_DIR"
@@ -58,11 +83,15 @@ if ! echo "$PATH" | tr ':' '\n' | grep -qx "${BIN_DIR}"; then
   printf "   Then run: source ~/.zshrc\n\n"
 else
   printf "\n✓ Ready. Available commands:\n"
-  printf "  boot-app          — bootstrap a new project\n"
-  printf "  boot.app          — alias for boot-app\n"
-  printf "  sync-os --cly     — sync fork improvements to upstream (Claude yolo)\n"
-  printf "  sync-os --dev     — sync fork improvements to upstream (Devin interactive)\n"
-  printf "  sync.os           — alias for sync-os --cly\n"
-  printf "  sync.os.dev       — alias for sync-os --dev\n\n"
+  printf "  boot-app            — bootstrap a new project\n"
+  printf "  boot.app            — alias for boot-app\n"
+  printf "  sync-os --cly       — sync fork improvements → upstream (Claude yolo)\n"
+  printf "  sync-os --dev       — sync fork improvements → upstream (Devin interactive)\n"
+  printf "  sync.os             — alias for sync-os --cly\n"
+  printf "  sync.os.dev         — alias for sync-os --dev\n"
+  printf "  update-os --cly     — pull upstream improvements → fork (Claude yolo)\n"
+  printf "  update-os --dev     — pull upstream improvements → fork (Devin interactive)\n"
+  printf "  update.os           — alias for update-os --cly\n"
+  printf "  update.os.dev       — alias for update-os --dev\n\n"
   printf "  Run: source ~/.zshrc\n\n"
 fi
