@@ -15,13 +15,14 @@ you which phase to execute.
 
 ## Background
 
-When a project is bootstrapped with `boot-app`, three repos are forked from shared
+When a project is bootstrapped with `boot-app`, four repos are forked from shared
 upstream parents:
 
 | Fork | Upstream parent role |
 |------|---------------------|
 | `{project}-pm-os` | Shared Product OS — PRD templates, prompt workflows, PM tooling |
 | `{project}-doe-os` | Shared Engineering OS — spec templates, scaffolding scripts |
+| `{project}-uxd-os` | Shared UX Design OS — design system, UX workflows, design templates |
 | `{project}` (app-hq) | Shared hub — CLAUDE.md templates, aliases, workflow configs |
 
 When another project (e.g. EverPlan) contributes improvements back to an upstream via
@@ -53,6 +54,7 @@ For each repo slug in `TARGET_REPOS` (comma-separated):
 1. Find its local directory:
    - `pm-os`    → look in `${PROJECT_ROOT}/product/` for a directory ending in `-pm-os`
    - `doe-os`   → look in `${PROJECT_ROOT}/engineering/` for a directory ending in `-doe-os`
+   - `uxd-os`   → look in `${PROJECT_ROOT}/product/` for a directory ending in `-uxd-os`
    - `app-hq`   → the project root itself (`${PROJECT_ROOT}`)
 2. Inside that directory, run `git remote -v` and identify the `upstream` remote.
    - If no `upstream` remote, record "upstream remote not configured" and skip.

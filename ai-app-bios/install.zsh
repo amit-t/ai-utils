@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 # install.zsh — Install ai-app-bios tools as global commands.
-# Installs: boot-app, sync-os, update-os
+# Installs: boot-app, sync-os, update-os, add-os
 # Usage: ./install.zsh
 # Run once from the ai-app-bios directory.
 
@@ -75,6 +75,31 @@ else
   printf "✓ Added alias to ~/.zshrc: update.os.dev\n"
 fi
 
+# ─── add-os ────────────────────────────────────────────────────────────────────
+ADD_OS_TARGET="${BIN_DIR}/add-os"
+ln -sf "${SCRIPT_DIR}/add-os.zsh" "$ADD_OS_TARGET"
+chmod +x "${SCRIPT_DIR}/add-os.zsh" "$ADD_OS_TARGET"
+printf "✓ Installed: %s → %s\n" "$ADD_OS_TARGET" "${SCRIPT_DIR}/add-os.zsh"
+
+# add.os     → Claude Code yolo mode  (non-interactive, dangerously-skip-permissions)
+# add.os.dev → Devin bypass mode      (interactive, --permission-mode dangerous)
+ADD_ALIAS_CLY="alias add.os='${SCRIPT_DIR}/add-os.zsh --cly'"
+ADD_ALIAS_DEV="alias add.os.dev='${SCRIPT_DIR}/add-os.zsh --dev'"
+
+if grep -qF "alias add.os=" "${HOME}/.zshrc" 2>/dev/null; then
+  printf "✓ Alias already in ~/.zshrc: add.os\n"
+else
+  printf "\n%s\n" "$ADD_ALIAS_CLY" >> "${HOME}/.zshrc"
+  printf "✓ Added alias to ~/.zshrc: add.os\n"
+fi
+
+if grep -qF "alias add.os.dev=" "${HOME}/.zshrc" 2>/dev/null; then
+  printf "✓ Alias already in ~/.zshrc: add.os.dev\n"
+else
+  printf "%s\n" "$ADD_ALIAS_DEV" >> "${HOME}/.zshrc"
+  printf "✓ Added alias to ~/.zshrc: add.os.dev\n"
+fi
+
 # ─── PATH check ────────────────────────────────────────────────────────────────
 if ! echo "$PATH" | tr ':' '\n' | grep -qx "${BIN_DIR}"; then
   printf "\n⚠  %s is not in your PATH.\n" "$BIN_DIR"
@@ -92,6 +117,10 @@ else
   printf "  update-os --cly     — pull upstream improvements → fork (Claude yolo)\n"
   printf "  update-os --dev     — pull upstream improvements → fork (Devin interactive)\n"
   printf "  update.os           — alias for update-os --cly\n"
-  printf "  update.os.dev       — alias for update-os --dev\n\n"
+  printf "  update.os.dev       — alias for update-os --dev\n"
+  printf "  add-os --cly        — provision a new OS repo into a project (Claude yolo)\n"
+  printf "  add-os --dev        — provision a new OS repo into a project (Devin interactive)\n"
+  printf "  add.os              — alias for add-os --cly\n"
+  printf "  add.os.dev          — alias for add-os --dev\n\n"
   printf "  Run: source ~/.zshrc\n\n"
 fi

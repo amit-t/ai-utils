@@ -8,7 +8,7 @@ You are being invoked to bootstrap a new software project with a complete produc
 
 ## Step 1: Interview
 
-Introduce yourself in one line: "I'll set up your project's PM OS, Engineering OS, and root planning layer. Let me ask a few questions."
+Introduce yourself in one line: "I'll set up your project's PM OS, Engineering OS, UX Design OS, and root planning layer. Let me ask a few questions."
 
 Then ask the following questions **one section at a time**:
 
@@ -69,10 +69,11 @@ After they pick, confirm: "I'll use **{pattern}** for the folder scaffold struct
 
 ### Section 3 — Repositories & GitHub Org
 Ask these together:
-- **GitHub org or username** under which ALL repos will be created — forks (app-hq, pm-os, doe-os, app) and the project hub repo. Default: personal GitHub account — press Enter to accept. Example: For "EverPlan", org `EverPlanHQ` → all repos live under `github.com/EverPlanHQ/`.
+- **GitHub org or username** under which ALL repos will be created — forks (app-hq, pm-os, doe-os, uxd-os, app) and the project hub repo. Default: personal GitHub account — press Enter to accept. Example: For "EverPlan", org `EverPlanHQ` → all repos live under `github.com/EverPlanHQ/`.
 - app-hq (project hub) GitHub URL (default: `https://github.com/AppIncubatorHQ/app-hq` — press Enter to accept)
 - pm-os scaffold GitHub URL (default: `https://github.com/AppIncubatorHQ/pm-os` — press Enter to accept)
 - doe-os scaffold GitHub URL (default: `https://github.com/AppIncubatorHQ/doe-os` — press Enter to accept)
+- uxd-os scaffold GitHub URL (default: `git@github.com-at:AppIncubatorHQ/uxd-os.git` — press Enter to accept)
 - Main app GitHub URL — optional, leave blank to skip cloning
 
 ### Section 4 — Confirm
@@ -93,6 +94,7 @@ Before writing anything, compute these internally:
 ROOT_DIR   = {install_dir}
 PMOS_DIR   = {ROOT_DIR}/product/{project_slug}-pm-os
 DOEOS_DIR  = {ROOT_DIR}/engineering/{project_slug}-doe-os
+UXDOS_DIR  = {ROOT_DIR}/product/{project_slug}-uxd-os
 APP_DIR    = {ROOT_DIR}/engineering/{project_slug}-app   (only if app URL given)
 ```
 
@@ -270,6 +272,26 @@ mkdir -p {ROOT_DIR}/engineering
 git clone "${GIT_URL_PREFIX}/{GITHUB_ORG_OR_USER}/{project_slug}-doe-os.git" {DOEOS_DIR}
 cd {DOEOS_DIR}
 git remote add upstream {doeos_url}
+```
+
+### 3.3a — Fork uxd-os scaffold
+
+Fork on GitHub (no clone), then clone explicitly so the destination is correct:
+
+If `GITHUB_ORG` is set:
+```bash
+gh repo fork {uxdos_url} --fork-name {project_slug}-uxd-os --org {GITHUB_ORG} --clone=false
+```
+If no org (personal account):
+```bash
+gh repo fork {uxdos_url} --fork-name {project_slug}-uxd-os --clone=false
+```
+Then clone into place:
+```bash
+mkdir -p {ROOT_DIR}/product
+git clone "${GIT_URL_PREFIX}/{GITHUB_ORG_OR_USER}/{project_slug}-uxd-os.git" {UXDOS_DIR}
+cd {UXDOS_DIR}
+git remote add upstream {uxdos_url}
 ```
 
 ### 3.4 — Fork app repo (only if URL was provided)
@@ -665,6 +687,30 @@ After writing the file:
 rm {DOEOS_DIR}/context-library/business-info-template.md
 ```
 
+### 3.11c — Pre-fill uxd-os business info
+
+Read `{UXDOS_DIR}/context-library/business-info-template.md` if it exists. If found, create a new file `{UXDOS_DIR}/context-library/business-info.md` with the template contents, replacing placeholders with interview values. Then delete the original template file.
+
+**Apply the same replacement map as pm-os Step 3.11** for all shared sections (Company Overview, Product Information, Target Market, Value Proposition, Strategy & Goals, Market & Competition, Business Model, Culture & Values, Key Resources).
+
+**Additionally, fill these uxd-os-specific sections if present:**
+
+**Design System / Technology:**
+| Template placeholder | Replace with |
+|---|---|
+| `[Frontend framework]` or similar | `{frontend}` |
+| `[Product Name]` | `{project_name}` |
+| `[Product description]` | `{product_desc}` |
+
+**Leave all other sections as placeholders** — the design team will fill those as they build out the UX design system.
+
+If `{UXDOS_DIR}/context-library/business-info-template.md` does not exist (uxd-os may have a different structure), skip this step and note it in the summary.
+
+After writing the file (if template was found):
+```bash
+rm {UXDOS_DIR}/context-library/business-info-template.md
+```
+
 ### 3.12 — Generate Claude auto-memory
 
 Compute the absolute path of ROOT_DIR (resolve it). Then:
@@ -924,10 +970,20 @@ git diff --quiet && git diff --cached --quiet || \
 git push origin main
 ```
 
-Verify both pushes succeeded:
+**Commit and push uxd-os** (business info pre-fill done locally, if template was found):
+```bash
+cd {UXDOS_DIR}
+git add .
+git diff --quiet && git diff --cached --quiet || \
+  git commit -m "feat: initialize {project_slug}-uxd-os with project context"
+git push origin main
+```
+
+Verify all pushes succeeded:
 ```bash
 echo "pm-os remote:" && git -C {PMOS_DIR} remote -v | head -2
 echo "doe-os remote:" && git -C {DOEOS_DIR} remote -v | head -2
+echo "uxd-os remote:" && git -C {UXDOS_DIR} remote -v | head -2
 ```
 
 ---
@@ -943,13 +999,14 @@ Print a clean summary of what was created:
   ✓ GitHub repo:    {hub_repo_url}  (fork of app-hq)
   ✓ pm-os:         {PMOS_DIR}
   ✓ doe-os:        {DOEOS_DIR}
+  ✓ uxd-os:        {UXDOS_DIR}
   ✓ App:           {APP_DIR}  (or "not forked — add later")
   ✓ Sync scripts:  {sync_target}
   ✓ Claude memory: {memory_dir}
   ✓ .gitignore:    engineering/ and product/ excluded (separate repos)
   ✓ aliases.sh:    registered in ~/Profiles/.zprofile (EXTERNAL PROJECT ALIASES section)
   ✓ Architecture:  {ARCH_PATTERN}
-  ✓ Business info: pm-os and doe-os business-info.md pre-filled with project context
+  ✓ Business info: pm-os, doe-os, and uxd-os business-info.md pre-filled with project context
   ✓ First PRD:     PRD-001-app-bootstrap.md (approved, ready for rpc.plan)
 
 ── Next Steps ──────────────────────────────────────────
@@ -960,6 +1017,7 @@ Print a clean summary of what was created:
   3. Review and refine business info (fill remaining placeholders):
        {PMOS_DIR}/context-library/business-info.md
        {DOEOS_DIR}/context-library/business-info.md
+       {UXDOS_DIR}/context-library/business-info.md
   4. Review the bootstrap PRD:
        {PMOS_DIR}/outputs/prds/PRD-001-app-bootstrap.md
   5. Write the engineering spec for PRD-001:

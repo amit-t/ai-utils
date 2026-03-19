@@ -2,8 +2,8 @@
 # sync-os.zsh — Sync new skills and improvements from project forks back to upstream parent repos.
 #
 # Usage:
-#   sync-os.zsh --cly [--repos pm-os,doe-os,app-hq]   # Claude Code yolo mode
-#   sync-os.zsh --dev [--repos pm-os,doe-os,app-hq]   # Devin bypass permission mode
+#   sync-os.zsh --cly [--repos pm-os,doe-os,uxd-os,app-hq]   # Claude Code yolo mode
+#   sync-os.zsh --dev [--repos pm-os,doe-os,uxd-os,app-hq]   # Devin bypass permission mode
 #
 # Installed aliases (via install.zsh):
 #   sync.os       → Claude Code  (--dangerously-skip-permissions, non-interactive)
@@ -28,13 +28,13 @@ while [[ $# -gt 0 ]]; do
     --cly)   MODE="cly";  shift ;;
     --dev)   MODE="dev";  shift ;;
     --repos) TARGET_REPOS_RAW="$2"; shift 2 ;;
-    --all)   TARGET_REPOS_RAW="pm-os,doe-os,app-hq"; shift ;;
+    --all)   TARGET_REPOS_RAW="pm-os,doe-os,uxd-os,app-hq"; shift ;;
     -h|--help)
-      printf "Usage: sync-os.zsh [--cly|--dev] [--repos pm-os,doe-os,app-hq]\n"
+      printf "Usage: sync-os.zsh [--cly|--dev] [--repos pm-os,doe-os,uxd-os,app-hq]\n"
       printf "\n  --cly          Use Claude Code in yolo mode (non-interactive)\n"
       printf "  --dev          Use Devin in bypass permission mode (interactive)\n"
-      printf "  --repos LIST   Comma-separated repos to sync (default: pm-os,doe-os,app-hq)\n"
-      printf "  --all          Sync all three repos (same as default)\n"
+      printf "  --repos LIST   Comma-separated repos to sync (default: pm-os,doe-os,uxd-os,app-hq)\n"
+      printf "  --all          Sync all four repos (same as default)\n"
       exit 0
       ;;
     *) printf "Unknown argument: %s\n" "$1" >&2; exit 1 ;;
@@ -47,7 +47,7 @@ if [[ -z "$MODE" ]]; then
   exit 1
 fi
 
-[[ -z "$TARGET_REPOS_RAW" ]] && TARGET_REPOS_RAW="pm-os,doe-os,app-hq"
+[[ -z "$TARGET_REPOS_RAW" ]] && TARGET_REPOS_RAW="pm-os,doe-os,uxd-os,app-hq"
 
 # ─── Verify required CLIs ──────────────────────────────────────────────────────
 if [[ "$MODE" == "cly" ]] && ! command -v claude >/dev/null 2>&1; then

@@ -12,12 +12,13 @@ you which phase to execute.
 
 ## Background
 
-When a new project is bootstrapped with `boot-app`, three repos are forked:
+When a new project is bootstrapped with `boot-app`, four repos are forked:
 
 | Fork | Role | Typical upstream |
 |------|------|-----------------|
 | `{project}-pm-os` | Product OS — PRD templates, prompt workflows, PM tooling | A shared `pm-os` parent repo |
 | `{project}-doe-os` | Engineering OS — spec templates, scaffolding scripts, engineering prompts | A shared `doe-os` parent repo |
+| `{project}-uxd-os` | UX Design OS — design system, UX workflows, design templates | A shared `uxd-os` parent repo |
 | `{project}` (app-hq) | Project hub — CLAUDE.md templates, aliases, workflow configs | A shared `app-hq` parent repo |
 
 Over time the team adds new skills, improves templates, or creates new utilities inside
@@ -37,13 +38,15 @@ upstream parents so every project benefits.
 
 ### Step 2 — Resolve target repos
 
-For each repo slug in `TARGET_REPOS` (comma-separated, e.g. `pm-os,doe-os,app-hq`):
+For each repo slug in `TARGET_REPOS` (comma-separated, e.g. `pm-os,doe-os,uxd-os,app-hq`):
 
 1. Find its local directory:
    - `pm-os` → look in `${PROJECT_ROOT}/product/` for a directory whose name ends in
      `-pm-os` or exactly matches `pm-os`
    - `doe-os` → look in `${PROJECT_ROOT}/engineering/` for a directory whose name ends
      in `-doe-os` or exactly matches `doe-os`
+   - `uxd-os` → look in `${PROJECT_ROOT}/product/` for a directory whose name ends in
+     `-uxd-os` or exactly matches `uxd-os`
    - `app-hq` → the project root itself (`${PROJECT_ROOT}`), since the hub is
      bootstrapped directly there
 2. Inside that directory, run `git remote -v` and identify the `upstream` remote.
