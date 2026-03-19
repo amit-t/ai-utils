@@ -19,6 +19,22 @@ Ask these together:
 - Target market / users (e.g. "Indian families aged 30–60", "indie hackers", "B2B SaaS teams")
 - Team size
 
+### Section 1b — Business Context
+Ask these together. Explain: "These details pre-fill your PM OS and Engineering OS business info files so every AI skill has real context from day one. You can always refine them later."
+
+- **Industry / category** (e.g. "SaaS", "Fintech", "Healthcare", "EdTech", "Consumer")
+- **Company stage** (Idea | Pre-seed | Seed | Series A | Series B | Growth | Public)
+- **Founded year** (or "this year" if new)
+- **Website URL** (leave blank if none yet)
+- **Detailed product description** — 2–3 sentences expanding on the one-liner. What makes it different? Who does it serve? (If the user struggles, offer to draft one from their one-liner and let them confirm.)
+- **Key features** — list 3–5 core features (e.g. "encrypted document vault", "role-based access", "AI-powered recommendations")
+- **Problem statement** — what core problem does this product solve? Be specific about who experiences it and why it matters.
+- **Solution statement** — how does your product solve that problem? Focus on approach and key differentiators.
+- **Mission statement** — what does your company exist to do? (one sentence)
+- **Vision (3–5 years)** — where do you want to be? (one sentence)
+- **Primary product category** (e.g. "Project Management", "Analytics", "CRM", "Estate Planning")
+- **Secondary categories** (optional, e.g. "Document Management, Digital Will")
+
 ### Section 2 — Tech Stack
 Ask these together. For each, offer numbered options and let them pick or type their own:
 
@@ -60,7 +76,7 @@ Ask these together:
 - Main app GitHub URL — optional, leave blank to skip cloning
 
 ### Section 4 — Confirm
-Show a compact summary of all answers, then ask: **"Ready to set up? [Y/n]"**
+Show a compact summary of all answers grouped by section, including business context (industry, stage, mission, vision, problem/solution statements, key features). Then ask: **"Ready to set up? [Y/n]"**
 
 If they say no, ask what to change and loop back.
 
@@ -91,6 +107,20 @@ APP_DIR    = {ROOT_DIR}/engineering/{project_slug}-app   (only if app URL given)
 - `ARCH_PATTERN` = the chosen architecture pattern name (e.g. "Clean Architecture", "Feature-Based")
 - `ARCH_FOLDER_LAYOUT` = the example folder layout string from the table (e.g. `src/{domain,application,infrastructure,presentation}/`)
 - These are used in the bootstrap PRD (Step 3.15) and threaded into CLAUDE.md / MEMORY.md
+
+**Business context** (from Section 1b):
+- `industry` = the industry / category (e.g. "SaaS", "Fintech - Estate Planning")
+- `company_stage` = company stage (e.g. "Pre-seed", "Growth")
+- `founded_year` = year founded (e.g. "2026")
+- `website_url` = website URL (may be blank)
+- `detailed_desc` = 2–3 sentence detailed product description
+- `key_features` = list of 3–5 key features (as bullet points)
+- `problem_statement` = the core problem description
+- `solution_statement` = how the product solves the problem
+- `mission_statement` = company mission (one sentence)
+- `vision_statement` = 3–5 year vision (one sentence)
+- `primary_category` = primary product category
+- `secondary_categories` = secondary categories (may be blank)
 
 **Claude memory path**:
 - Take ROOT_DIR as an absolute path
@@ -559,15 +589,81 @@ If app URL was provided, also create the output directories:
 mkdir -p {APP_DIR}/ai/outputs/prds {APP_DIR}/ai/outputs/specs
 ```
 
-### 3.11 — Pre-fill pm-os business info template (if file exists)
+### 3.11 — Pre-fill pm-os business info
 
-Check if `{PMOS_DIR}/context-library/business-info-template.md` exists.
-If it does, read it and replace these common placeholder patterns with actual values:
-- `[Your Company]` → project_name
-- `[Your Product]` → project_name
-- `[Product description]` → product_desc
-- `[Target users]` → target_market
-- `[Team size]` → team_size
+Read `{PMOS_DIR}/context-library/business-info-template.md`. Create a new file `{PMOS_DIR}/context-library/business-info.md` with the template contents, replacing ALL matching placeholders with interview values. Then delete the original template file.
+
+**Replacement map (pm-os):**
+
+| Template placeholder | Replace with |
+|---|---|
+| `[Your Company Name]` | `{project_name}` |
+| `[Your Industry - e.g., SaaS, Fintech, Healthcare]` | `{industry}` |
+| `[Company Stage - e.g., Seed, Series A, Series B, Growth, Public]` | `{company_stage}` |
+| `[Year]` (in Founded line only) | `{founded_year}` |
+| `[Number]` (in Employees line only) | `{team_size}` |
+| `[ARR/Revenue figure]` | `$0 (pre-revenue)` if stage is Idea/Pre-seed/Seed, otherwise leave as placeholder |
+| `[Funding stage and total raised]` | `$0 (pre-funding)` if stage is Idea/Pre-seed, otherwise leave as placeholder |
+| `[URL]` (in Website line only) | `{website_url}` (or `TBD` if blank) |
+| `[Your Product Name]` | `{project_name}` |
+| `[One sentence describing what your product does and for whom]` | `{product_desc}` |
+| `[2-3 paragraphs describing your product, what makes it different, and who it serves]` | `{detailed_desc}` |
+| `[e.g., Project Management, Analytics, CRM]` (Primary Category) | `{primary_category}` |
+| `[Related categories]` | `{secondary_categories}` (or leave as placeholder if blank) |
+| `[Feature 1]` through `[Feature 5]` | Fill from `{key_features}` list; leave remaining as placeholder if fewer than 5 |
+| `[Technologies]` lines in Technology Stack | Fill from interview: Frontend → `{frontend}`, Backend → `{backend}`, Database → `{database}`, Infrastructure → `{cloud}` |
+| `[Describe the core problem your product solves...]` | `{problem_statement}` |
+| `[Describe how your product solves the problem...]` | `{solution_statement}` |
+| `[Your company's mission - what you exist to do]` | `{mission_statement}` |
+| `[Where you want to be in 3-5 years]` | `{vision_statement}` |
+
+**For the Target Market section**, use `{target_market}` to fill:
+- Primary Customer → **Who:** `{target_market}` 
+- Fill **Geography** based on the target market description
+- Fill **Company size**, **Industry**, **Budget** as `N/A` if the product is consumer/B2C, otherwise leave as placeholder
+
+**For Buyer Personas**, generate 3 persona nicknames that make sense for the target market (like "Digital-First Individual", "Traditional Planner", "Family Member" for an estate planning product aimed at Indian families). Fill in the nickname and title; leave the detail fields as placeholders.
+
+**For the Unique Value Proposition "What makes us different" section**, derive 3-4 differentiators from the key features and solution statement.
+
+**Leave all other sections as placeholders** — the user will fill those as they refine the product.
+
+After writing the file:
+```bash
+rm {PMOS_DIR}/context-library/business-info-template.md
+```
+
+### 3.11b — Pre-fill doe-os business info
+
+Read `{DOEOS_DIR}/context-library/business-info-template.md`. Create a new file `{DOEOS_DIR}/context-library/business-info.md` with the template contents, replacing placeholders with interview values. Then delete the original template file.
+
+**Apply the same replacement map as pm-os Step 3.11** for all shared sections (Company Overview, Product Information, Target Market, Value Proposition, Strategy & Goals, Market & Competition, Business Model, Culture & Values, Key Resources).
+
+**Additionally, fill these doe-os-specific sections:**
+
+**Technology Stack (detailed):**
+| Template placeholder | Replace with |
+|---|---|
+| `[e.g., Go, Java, Python, TypeScript]` (Primary backend language) | Derive from `{backend}` (e.g. "Elysia.js + Bun" → "TypeScript (Bun runtime with Elysia.js)") |
+| `[If applicable]` (Secondary backend languages) | `N/A` unless stack notes mention additional languages |
+| `[e.g., React, Next.js, Vue]` (Frontend framework) | `{frontend}` |
+| `[e.g., React Native, Swift, Kotlin]` (Mobile) | Derive from stack notes or set to `TBD` |
+| `[e.g., AWS, GCP, Azure]` (Cloud provider) | `{cloud}` |
+| All other Infrastructure, Data & Storage, Observability, Developer Tooling fields | Fill what can be derived from `{stack_notes}`; leave the rest as placeholders |
+
+**Architecture Overview:**
+| Template placeholder | Replace with |
+|---|---|
+| `[e.g., Monolith, Microservices, Modular monolith, Hybrid]` (Architecture style) | `{ARCH_PATTERN}` |
+
+**Engineering Organization section:** Leave as placeholders (this is detailed info the DoE will fill later).
+
+**For the Problem Statement and Solution Statement**, enhance the pm-os versions with an engineering perspective. For example, add a sentence about the key technical challenges involved (derive from the tech stack and product description).
+
+After writing the file:
+```bash
+rm {DOEOS_DIR}/context-library/business-info-template.md
+```
 
 ### 3.12 — Generate Claude auto-memory
 
@@ -819,12 +915,12 @@ git diff --quiet && git diff --cached --quiet || \
 git push origin main
 ```
 
-**Commit and push doe-os** (initial setup; push even if no local changes to confirm remote is reachable):
+**Commit and push doe-os** (business info pre-fill done locally):
 ```bash
 cd {DOEOS_DIR}
 git add .
 git diff --quiet && git diff --cached --quiet || \
-  git commit -m "feat: initialize {project_slug}-doe-os for {project_name}"
+  git commit -m "feat: initialize {project_slug}-doe-os with project context and engineering stack info"
 git push origin main
 ```
 
@@ -853,6 +949,7 @@ Print a clean summary of what was created:
   ✓ .gitignore:    engineering/ and product/ excluded (separate repos)
   ✓ aliases.sh:    registered in ~/Profiles/.zprofile (EXTERNAL PROJECT ALIASES section)
   ✓ Architecture:  {ARCH_PATTERN}
+  ✓ Business info: pm-os and doe-os business-info.md pre-filled with project context
   ✓ First PRD:     PRD-001-app-bootstrap.md (approved, ready for rpc.plan)
 
 ── Next Steps ──────────────────────────────────────────
@@ -860,13 +957,16 @@ Print a clean summary of what was created:
   1. Reload your shell to activate the project aliases:
        source ~/Profiles/.zprofile
   2. Open Claude Code in {ROOT_DIR}
-  3. Review the bootstrap PRD:
+  3. Review and refine business info (fill remaining placeholders):
+       {PMOS_DIR}/context-library/business-info.md
+       {DOEOS_DIR}/context-library/business-info.md
+  4. Review the bootstrap PRD:
        {PMOS_DIR}/outputs/prds/PRD-001-app-bootstrap.md
-  4. Write the engineering spec for PRD-001:
+  5. Write the engineering spec for PRD-001:
        {DOEOS_DIR}/outputs/specs/
-  5. Sync + plan:
+  6. Sync + plan:
        ./ai/sync-all.zsh && rpc.plan
-  6. Build:
+  7. Build:
        rpc.int
 
   Your first PRD is ready — write the engineering spec and you can start building.
