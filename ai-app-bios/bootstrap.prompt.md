@@ -67,6 +67,28 @@ Ask this after the tech stack. Present numbered options with descriptions so the
 
 After they pick, confirm: "I'll use **{pattern}** for the folder scaffold structure in the first bootstrap PRD."
 
+### Section 2c — Hexagon Scaffold (conditional)
+
+**Only ask this section if ALL of the following are true:**
+1. The user chose **Hexagonal (Ports & Adapters)** as the architecture pattern
+2. The user's backend includes **Elysia.js + Bun**
+3. The user's frontend includes **React + Vite** or **React 19**
+4. The user's database includes **PostgreSQL** and/or **MongoDB**
+
+If all conditions are met, present this to the user:
+
+> **Pre-built hexagon scaffold available**
+>
+> Your stack matches the hexagon scaffold at `https://github.com/AppIncubatorHQ/app` (branch `hexagon`). It includes everything already wired together:
+> - `apps/api` — Elysia + Bun with full hexagonal structure (`core/ports/in`, `core/ports/out`, `core/services`, `core/errors`, `adapters/in/http`, `adapters/out/`)
+> - `apps/web` — React 19 + Vite 6, feature-based structure
+> - `packages/shared-types` — API response envelope types
+> - Biome, Lefthook, Docker Compose (PG 16, Mongo 7, Redis 7), Drizzle ORM, strict TypeScript, ESLint boundary enforcement, `.ralphrc`
+>
+> **Do you want to pull this scaffold into your new app's `main` branch? [Y/n]**
+
+Store the answer as `USE_HEXAGON_SCAFFOLD` (true/false). If the conditions are not all met, set `USE_HEXAGON_SCAFFOLD` = false and skip this section entirely.
+
 ### Section 3 — Repositories & GitHub Org
 Ask these together:
 - **GitHub org or username** under which ALL repos will be created — forks (app-hq, pm-os, doe-os, uxd-os, app) and the project hub repo. Default: personal GitHub account — press Enter to accept. Example: For "EverPlan", org `EverPlanHQ` → all repos live under `github.com/EverPlanHQ/`.
@@ -109,6 +131,11 @@ APP_DIR    = {ROOT_DIR}/engineering/{project_slug}-app   (only if app URL given)
 - `ARCH_PATTERN` = the chosen architecture pattern name (e.g. "Clean Architecture", "Feature-Based")
 - `ARCH_FOLDER_LAYOUT` = the example folder layout string from the table (e.g. `src/{domain,application,infrastructure,presentation}/`)
 - These are used in the bootstrap PRD (Step 3.15) and threaded into CLAUDE.md / MEMORY.md
+
+**Hexagon scaffold**:
+- `USE_HEXAGON_SCAFFOLD` = true/false (from Section 2c answer)
+- If `USE_HEXAGON_SCAFFOLD` is true and no app URL was provided in Section 3: automatically set `APP_URL` = `https://github.com/AppIncubatorHQ/app` and `APP_DIR` = `{ROOT_DIR}/engineering/{project_slug}-app`
+- `HEXAGON_SCAFFOLD_REPO` = `https://github.com/AppIncubatorHQ/app` (constant, used in Step 3.4)
 
 **Business context** (from Section 1b):
 - `industry` = the industry / category (e.g. "SaaS", "Fintech - Estate Planning")
@@ -294,7 +321,7 @@ cd {UXDOS_DIR}
 git remote add upstream {uxdos_url}
 ```
 
-### 3.4 — Fork app repo (only if URL was provided)
+### 3.4 — Fork app repo (only if URL was provided OR `USE_HEXAGON_SCAFFOLD` is true)
 `{app_repo_name}` = the last path segment of `{app_url}` (e.g. `https://github.com/org/my-app` → `my-app`)
 If `GITHUB_ORG` is set:
 ```bash
@@ -305,6 +332,26 @@ If no org (personal account):
 ```bash
 gh repo fork {app_url} --clone=false
 git clone "${GIT_URL_PREFIX}/{GITHUB_ORG_OR_USER}/{app_repo_name}.git" {APP_DIR}
+```
+
+#### 3.4a — Pull hexagon scaffold into app main (only if `USE_HEXAGON_SCAFFOLD` is true)
+
+After the fork and clone above, merge the `hexagon` branch from the upstream scaffold repo into the new app's `main` branch:
+
+```bash
+cd {APP_DIR}
+# Add upstream pointing to the scaffold (only if app_url was not already AppIncubatorHQ/app)
+git remote add upstream https://github.com/AppIncubatorHQ/app.git 2>/dev/null || true
+git fetch upstream hexagon
+git merge upstream/hexagon --allow-unrelated-histories -m "feat: bootstrap with hexagon scaffold from AppIncubatorHQ/app@hexagon"
+git push origin main
+```
+
+After pushing, announce: "✓ Hexagon scaffold merged into `{project_slug}-app` main branch."
+
+Remove the `upstream` remote after merging if you don't want to track it long-term (optional — leave it if the user may want to pull future scaffold updates):
+```bash
+# Leave upstream in place so future scaffold updates can be pulled with: git fetch upstream hexagon && git merge upstream/hexagon
 ```
 
 ### 3.5 — (Handled by Step 3.1)
