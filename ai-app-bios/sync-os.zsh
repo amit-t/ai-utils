@@ -75,14 +75,14 @@ fi
 SUPERPOWERS_PLUGIN_DIR=""
 if [[ "$MODE" == "sup" ]]; then
   if command -v python3 >/dev/null 2>&1; then
-    SUPERPOWERS_PLUGIN_DIR="$(claude plugins list --json 2>/dev/null | python3 -c "
+    SUPERPOWERS_PLUGIN_DIR="$(claude plugins list --json 2>/dev/null | python3 -c '
 import sys, json
 plugins = json.load(sys.stdin)
 for p in plugins:
-    if p['id'].startswith('superpowers@'):
-        print(p['installPath'])
+    if p["id"].startswith("superpowers@"):
+        print(p["installPath"])
         break
-" 2>/dev/null)"
+' 2>/dev/null)"
   fi
   if [[ -z "$SUPERPOWERS_PLUGIN_DIR" || ! -d "$SUPERPOWERS_PLUGIN_DIR" ]]; then
     printf "Error: superpowers plugin not found.\n" >&2
