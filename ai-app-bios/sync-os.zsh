@@ -3,10 +3,12 @@
 #
 # Usage:
 #   sync-os.zsh --cly [--repos pm-os,doe-os,uxd-os,app-hq]   # Claude Code yolo mode
+#   sync-os.zsh --sup [--repos pm-os,doe-os,uxd-os,app-hq]   # Claude Code superpowers plugin mode
 #   sync-os.zsh --dev [--repos pm-os,doe-os,uxd-os,app-hq]   # Devin bypass permission mode
 #
 # Installed aliases (via install.zsh):
 #   sync.os       → Claude Code  (--dangerously-skip-permissions, non-interactive)
+#   sync.os.sup   → Claude Code  (superpowers plugin, --dangerously-skip-permissions)
 #   sync.os.dev   → Devin        (--permission-mode dangerous, interactive)
 #
 # How it works:
@@ -26,12 +28,14 @@ TARGET_REPOS_RAW=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --cly)   MODE="cly";  shift ;;
+    --sup)   MODE="sup";  shift ;;
     --dev)   MODE="dev";  shift ;;
     --repos) TARGET_REPOS_RAW="$2"; shift 2 ;;
     --all)   TARGET_REPOS_RAW="pm-os,doe-os,uxd-os,app-hq"; shift ;;
     -h|--help)
-      printf "Usage: sync-os.zsh [--cly|--dev] [--repos pm-os,doe-os,uxd-os,app-hq]\n"
+      printf "Usage: sync-os.zsh [--cly|--sup|--dev] [--repos pm-os,doe-os,uxd-os,app-hq]\n"
       printf "\n  --cly          Use Claude Code in yolo mode (non-interactive)\n"
+      printf "  --sup          Use Claude Code with superpowers plugin (non-interactive)\n"
       printf "  --dev          Use Devin in bypass permission mode (interactive)\n"
       printf "  --repos LIST   Comma-separated repos to sync (default: pm-os,doe-os,uxd-os,app-hq)\n"
       printf "  --all          Sync all four repos (same as default)\n"
@@ -42,7 +46,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$MODE" ]]; then
-  printf "Error: specify --cly (Claude) or --dev (Devin)\n" >&2
+  printf "Error: specify --cly (Claude), --sup (Claude + superpowers), or --dev (Devin)\n" >&2
   printf "Run with --help for usage.\n" >&2
   exit 1
 fi
@@ -50,7 +54,7 @@ fi
 [[ -z "$TARGET_REPOS_RAW" ]] && TARGET_REPOS_RAW="pm-os,doe-os,uxd-os,app-hq"
 
 # ─── Verify required CLIs ──────────────────────────────────────────────────────
-if [[ "$MODE" == "cly" ]] && ! command -v claude >/dev/null 2>&1; then
+if [[ "$MODE" == "cly" || "$MODE" == "sup" ]] && ! command -v claude >/dev/null 2>&1; then
   printf "Error: 'claude' CLI not found. Install Claude Code and ensure it is in PATH.\n" >&2
   exit 1
 fi
@@ -67,6 +71,27 @@ if ! command -v git >/dev/null 2>&1; then
   exit 1
 fi
 
+# ─── Discover superpowers plugin (sup mode only) ──────────────────────────────
+SUPERPOWERS_PLUGIN_DIR=""
+if [[ "$MODE" == "sup" ]]; then
+  if command -v python3 >/dev/null 2>&1; then
+    SUPERPOWERS_PLUGIN_DIR="$(claude plugins list --json 2>/dev/null | python3 -c "
+import sys, json
+plugins = json.load(sys.stdin)
+for p in plugins:
+    if p['id'].startswith('superpowers@'):
+        print(p['installPath'])
+        break
+" 2>/dev/null)"
+  fi
+  if [[ -z "$SUPERPOWERS_PLUGIN_DIR" || ! -d "$SUPERPOWERS_PLUGIN_DIR" ]]; then
+    printf "Error: superpowers plugin not found.\n" >&2
+    printf "Install it with: claude plugin install superpowers\n" >&2
+    exit 1
+  fi
+  printf "✓ Superpowers plugin: %s\n" "$SUPERPOWERS_PLUGIN_DIR"
+fi
+
 # ─── Locate project root by walking up for CLAUDE.md ──────────────────────────
 PROJECT_ROOT="$(pwd)"
 SEARCH="$(pwd)"
@@ -78,7 +103,13 @@ while [[ "$SEARCH" != "/" ]]; do
   SEARCH="$(dirname "$SEARCH")"
 done
 
-ENGINE_LABEL="$([[ $MODE == cly ]] && echo 'Claude Code  (yolo / --dangerously-skip-permissions)' || echo 'Devin  (bypass / --permission-mode dangerous)')"
+if [[ "$MODE" == "sup" ]]; then
+  ENGINE_LABEL="Claude Code  (superpowers plugin / --dangerously-skip-permissions)"
+elif [[ "$MODE" == "cly" ]]; then
+  ENGINE_LABEL="Claude Code  (yolo / --dangerously-skip-permissions)"
+else
+  ENGINE_LABEL="Devin  (bypass / --permission-mode dangerous)"
+fi
 
 printf "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
 printf "  SYNC-OS  —  Fork → Upstream PR Utility\n"
@@ -131,6 +162,8 @@ printf "Phase 1 — Analysing forks vs upstream parents ...\n\n"
 
 if [[ "$MODE" == "cly" ]]; then
   CLAUDECODE="" claude -p --dangerously-skip-permissions "$PHASE1_PROMPT"
+elif [[ "$MODE" == "sup" ]]; then
+  CLAUDECODE="" claude -p --dangerously-skip-permissions --plugin-dir "$SUPERPOWERS_PLUGIN_DIR" "$PHASE1_PROMPT"
 else
   P1_FILE="${SYNC_DIR}/phase1-prompt.md"
   printf "%s" "$PHASE1_PROMPT" > "$P1_FILE"
@@ -193,6 +226,8 @@ printf "\nPhase 2 — Creating upstream PRs ...\n\n"
 
 if [[ "$MODE" == "cly" ]]; then
   CLAUDECODE="" claude -p --dangerously-skip-permissions "$PHASE2_PROMPT"
+elif [[ "$MODE" == "sup" ]]; then
+  CLAUDECODE="" claude -p --dangerously-skip-permissions --plugin-dir "$SUPERPOWERS_PLUGIN_DIR" "$PHASE2_PROMPT"
 else
   P2_FILE="${SYNC_DIR}/phase2-prompt.md"
   printf "%s" "$PHASE2_PROMPT" > "$P2_FILE"

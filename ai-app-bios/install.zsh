@@ -32,8 +32,10 @@ chmod +x "${SCRIPT_DIR}/sync-os.zsh" "$SYNC_TARGET"
 printf "✓ Installed: %s → %s\n" "$SYNC_TARGET" "${SCRIPT_DIR}/sync-os.zsh"
 
 # sync.os     → Claude Code yolo mode  (non-interactive, dangerously-skip-permissions)
+# sync.os.sup → Claude Code superpowers plugin mode (non-interactive, dangerously-skip-permissions + superpowers)
 # sync.os.dev → Devin bypass mode      (interactive, --permission-mode dangerous)
 SYNC_ALIAS_CLY="alias sync.os='${SCRIPT_DIR}/sync-os.zsh --cly'"
+SYNC_ALIAS_SUP="alias sync.os.sup='${SCRIPT_DIR}/sync-os.zsh --sup'"
 SYNC_ALIAS_DEV="alias sync.os.dev='${SCRIPT_DIR}/sync-os.zsh --dev'"
 
 if grep -qF "alias sync.os=" "${HOME}/.zshrc" 2>/dev/null; then
@@ -41,6 +43,13 @@ if grep -qF "alias sync.os=" "${HOME}/.zshrc" 2>/dev/null; then
 else
   printf "\n%s\n" "$SYNC_ALIAS_CLY" >> "${HOME}/.zshrc"
   printf "✓ Added alias to ~/.zshrc: sync.os\n"
+fi
+
+if grep -qF "alias sync.os.sup=" "${HOME}/.zshrc" 2>/dev/null; then
+  printf "✓ Alias already in ~/.zshrc: sync.os.sup\n"
+else
+  printf "%s\n" "$SYNC_ALIAS_SUP" >> "${HOME}/.zshrc"
+  printf "✓ Added alias to ~/.zshrc: sync.os.sup\n"
 fi
 
 if grep -qF "alias sync.os.dev=" "${HOME}/.zshrc" 2>/dev/null; then
@@ -111,8 +120,10 @@ else
   printf "  boot-app            — bootstrap a new project\n"
   printf "  boot.app            — alias for boot-app\n"
   printf "  sync-os --cly       — sync fork improvements → upstream (Claude yolo)\n"
+  printf "  sync-os --sup       — sync fork improvements → upstream (Claude superpowers)\n"
   printf "  sync-os --dev       — sync fork improvements → upstream (Devin interactive)\n"
   printf "  sync.os             — alias for sync-os --cly\n"
+  printf "  sync.os.sup         — alias for sync-os --sup\n"
   printf "  sync.os.dev         — alias for sync-os --dev\n"
   printf "  update-os --cly     — pull upstream improvements → fork (Claude yolo)\n"
   printf "  update-os --dev     — pull upstream improvements → fork (Devin interactive)\n"
