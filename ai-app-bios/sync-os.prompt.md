@@ -74,6 +74,37 @@ git diff upstream/main...HEAD --name-only --diff-filter=ACMR
 git diff upstream/main...HEAD --stat
 ```
 
+#### 3b — Detect new directory structures
+
+Beyond individual file changes, look for new directory trees the fork has added that
+do not exist in upstream at all. These often represent generic organisational scaffolding
+(folder hierarchies, `.gitkeep` files, README markers) that any project could benefit from.
+
+```bash
+# List all directories in the fork that contain at least one tracked file
+git ls-tree -r -d --name-only HEAD
+
+# List all directories in upstream
+git ls-tree -r -d --name-only upstream/main
+
+# Directories unique to the fork (new scaffolding)
+comm -23 <(git ls-tree -r -d --name-only HEAD | sort) \
+         <(git ls-tree -r -d --name-only upstream/main | sort)
+```
+
+For each new directory, inspect its contents:
+- If the directory contains only `.gitkeep`, `README.md`, or other marker/template files,
+  it is **directory scaffolding** — a structural convention, not generated output.
+- If the directory contains generated artefacts (reports, build output, logs) alongside
+  the scaffolding, the **scaffolding itself** (`.gitkeep`, `README.md`, any template or
+  config files that define the folder's purpose) is still contributable. The generated
+  content files are not.
+
+This applies **especially** to paths under `outputs/`, `fitness_output/`, and similar
+directories that the existing rules would normally skip wholesale. The directory tree
+and its organisational markers are generic infrastructure; only the actual generated
+content is project-specific.
+
 ### Step 4 — Categorise changes
 
 For each changed file, classify it as one of:
@@ -84,16 +115,26 @@ For each changed file, classify it as one of:
 | **skill-improvement** | Modified existing prompt/template with generic improvements | ✅ Yes |
 | **new-utility** | New shell script, new alias block, generic helper | ✅ Yes |
 | **config-generic** | Generic CLAUDE.md improvements, `.gitignore` additions | ✅ Yes |
+| **new-directory-scaffold** | New folder tree with `.gitkeep` / `README.md` markers defining a generic organisational structure (even under `outputs/` etc.) | ✅ Yes |
 | **project-specific** | App source code, project-specific configs, hardcoded project names | ❌ No |
-| **generated-output** | Anything under `outputs/`, `fitness_output/`, build artefacts | ❌ No |
+| **generated-output** | Actual generated content (reports, build artefacts, logs) inside `outputs/`, `fitness_output/`, `build/`, `dist/` — but NOT the directory scaffolding itself | ❌ No |
 | **credentials** | `.env`, secrets, tokens, keys | ❌ NEVER |
 | **unclear** | Hard to classify — needs human review | ⚠ Flag |
 
 **Rules for categorisation:**
 - A file is project-specific if it contains the project name/slug as a hardcoded value
   that would be meaningless in the upstream context.
-- Files inside `outputs/`, `dist/`, `build/`, `.sync-os/`, `node_modules/` are always
-  generated-output regardless of content.
+- **Directory scaffold vs generated content** — this is the critical distinction:
+  - `.gitkeep` files, `README.md` files that describe a folder's purpose, and template/config
+    files that establish a directory convention are **new-directory-scaffold** and ARE
+    contributable, even when they live under `outputs/`, `fitness_output/`, or similar paths.
+  - Actual generated content (PDFs, HTML reports, CSVs, build artefacts, log files, dated
+    output files) are **generated-output** and are NOT contributable.
+  - When a new directory under `outputs/` contains both scaffolding and generated content,
+    contribute the scaffolding files and skip the generated files.
+- Files inside `dist/`, `build/`, `node_modules/` are always generated-output regardless
+  of content (these are build caches, not organisational scaffolding).
+- Files inside `.sync-os/`, `.update-os/` are tool artefacts and always skipped.
 - Prompt `.md` files that reference generic placeholders (`{project_name}`, etc.) are
   skills. Prompt files with real project names baked in are project-specific.
 - Shell scripts that are pure utilities with no project-specific paths/values are
@@ -123,6 +164,17 @@ Project: {project name from CLAUDE.md}
 | `path/to/file.md` | new-skill | One-line description of what it adds |
 | `path/to/script.zsh` | new-utility | One-line description |
 
+### Directory Scaffolding to Contribute
+
+New directory structures added in the fork that represent generic organisational
+conventions. Only the scaffold files (`.gitkeep`, `README.md`, templates) are
+included — generated content within these directories is excluded.
+
+| Directory | Scaffold files | Purpose |
+|-----------|---------------|---------|
+| `outputs/reports/` | `.gitkeep`, `README.md` | Standard reports output folder |
+| `outputs/analysis/weekly/` | `.gitkeep` | Weekly analysis output convention |
+
 **Proposed PR title:** `sync: {short description of contributions}`
 
 **Proposed PR body:**
@@ -145,11 +197,11 @@ Project: {project name from CLAUDE.md}
 
 ## Summary
 
-| Repo | Contributable files | PR needed |
-|------|---------------------|-----------|
-| pm-os | N | Yes / No |
-| doe-os | N | Yes / No |
-| app-hq | N | Yes / No |
+| Repo | Contributable files | Scaffold dirs | PR needed |
+|------|---------------------|---------------|-----------|
+| pm-os | N | N | Yes / No |
+| doe-os | N | N | Yes / No |
+| app-hq | N | N | Yes / No |
 ```
 
 If a repo has no contributable changes, include it in the "no changes" section.
@@ -186,6 +238,20 @@ git checkout HEAD -- path/to/file.md
 git add path/to/file.md
 ```
 
+For each directory in the "Directory Scaffolding to Contribute" table, copy only
+the scaffold files (`.gitkeep`, `README.md`, templates) — never the generated content:
+
+```bash
+# Create the directory structure and copy only scaffold files
+mkdir -p path/to/outputs/reports
+git checkout HEAD -- path/to/outputs/reports/.gitkeep
+git checkout HEAD -- path/to/outputs/reports/README.md
+git add path/to/outputs/reports/
+```
+
+If the directory contains a mix of scaffold and generated files, be selective — only
+`git checkout` the scaffold marker files, not any generated artefacts.
+
 After staging all contributable files:
 
 ```bash
@@ -194,7 +260,11 @@ git commit -m "sync: {short description matching proposed PR title}
 Contributions from {project_name} fork.
 Files included:
 - path/to/file.md — description
-- path/to/script.zsh — description"
+- path/to/script.zsh — description
+
+Directory scaffolding included:
+- outputs/reports/ — .gitkeep, README.md
+"
 ```
 
 ### Step 3 — Push the sync branch to the fork
@@ -251,8 +321,11 @@ Generated: {ISO timestamp}
    them entirely and do not mention their contents in any output.
 2. **Never force-push.** Use regular `git push origin {branch}`.
 3. **Never push to upstream directly.** All changes go via PR from fork → upstream.
-4. **Never include generated outputs.** `outputs/`, `fitness_output/`, `build/`, `dist/`
-   are always excluded.
+4. **Never include generated outputs.** Actual generated content (reports, build artefacts,
+   dated files, logs) inside `outputs/`, `fitness_output/`, `build/`, `dist/` is excluded.
+   **However**, directory scaffolding (`.gitkeep`, `README.md`, templates) that defines the
+   organisational structure of those folders IS contributable — the tree is generic
+   infrastructure even when the contents are project-specific.
 5. **One PR per repo.** Even if multiple files are being contributed, bundle them into
    a single PR per repo.
 6. **Dry-run git commands before committing.** Use `git status` and `git diff --staged`
@@ -261,3 +334,6 @@ Generated: {ISO timestamp}
    repo — do not attempt to guess or infer the upstream URL.
 8. **If a file is ambiguous** (unclear category), classify it as project-specific and
    flag it in the summary for human review. Do not include it in a PR.
+9. **Scaffold vs content test**: when deciding whether a file inside `outputs/` (or similar)
+   is contributable, ask: "Would this file exist identically in a brand-new project fork
+   that has never run any workflows?" If yes, it is scaffold. If no, it is generated output.
