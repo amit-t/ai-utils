@@ -37,9 +37,10 @@ while [[ $# -gt 0 ]]; do
       printf "  --os NAME        OS to add (e.g. uxd-os)\n"
       printf "  --upstream URL   Override the upstream source URL (uses known default if omitted)\n"
       printf "\nKnown OS defaults:\n"
-      printf "  uxd-os   git@github.com-at:AppIncubatorHQ/uxd-os.git  (product/)\n"
-      printf "  pm-os    https://github.com/AppIncubatorHQ/pm-os       (product/)\n"
-      printf "  doe-os   https://github.com/AppIncubatorHQ/doe-os      (engineering/)\n"
+      printf "  uxd-os    git@github.com-at:AppIncubatorHQ/uxd-os.git  (product/)\n"
+      printf "  pm-os     https://github.com/AppIncubatorHQ/pm-os       (product/)\n"
+      printf "  doe-os    https://github.com/AppIncubatorHQ/doe-os      (engineering/)\n"
+      printf "  ai-fs-os  https://github.com/AppIncubatorHQ/ai-fs-os    (root, template+private)\n"
       exit 0
       ;;
     *) printf "Unknown argument: %s\n" "$1" >&2; exit 1 ;;

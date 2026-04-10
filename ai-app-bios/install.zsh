@@ -18,11 +18,19 @@ chmod +x "${SCRIPT_DIR}/boot-app.zsh" "$BOOT_TARGET"
 printf "✓ Installed: %s → %s\n" "$BOOT_TARGET" "${SCRIPT_DIR}/boot-app.zsh"
 
 BOOT_ALIAS="alias boot.app='${SCRIPT_DIR}/boot-app.zsh'"
+BOOT_TRIM_ALIAS="alias boot.app.trim='${SCRIPT_DIR}/boot-app.zsh --trim'"
 if grep -qF "alias boot.app=" "${HOME}/.zshrc" 2>/dev/null; then
   printf "✓ Alias already in ~/.zshrc: boot.app\n"
 else
   printf "\n%s\n" "$BOOT_ALIAS" >> "${HOME}/.zshrc"
   printf "✓ Added alias to ~/.zshrc: boot.app\n"
+fi
+
+if grep -qF "alias boot.app.trim=" "${HOME}/.zshrc" 2>/dev/null; then
+  printf "✓ Alias already in ~/.zshrc: boot.app.trim\n"
+else
+  printf "%s\n" "$BOOT_TRIM_ALIAS" >> "${HOME}/.zshrc"
+  printf "✓ Added alias to ~/.zshrc: boot.app.trim\n"
 fi
 
 # ─── sync-os ───────────────────────────────────────────────────────────────────
@@ -117,8 +125,10 @@ if ! echo "$PATH" | tr ':' '\n' | grep -qx "${BIN_DIR}"; then
   printf "   Then run: source ~/.zshrc\n\n"
 else
   printf "\n✓ Ready. Available commands:\n"
-  printf "  boot-app            — bootstrap a new project\n"
+  printf "  boot-app            — bootstrap a new project (full)\n"
+  printf "  boot-app --trim     — lightweight bootstrap (HQ + ai-fs-os only)\n"
   printf "  boot.app            — alias for boot-app\n"
+  printf "  boot.app.trim       — alias for boot-app --trim\n"
   printf "  sync-os --cly       — sync fork improvements → upstream (Claude yolo)\n"
   printf "  sync-os --sup       — sync fork improvements → upstream (Claude superpowers)\n"
   printf "  sync-os --dev       — sync fork improvements → upstream (Devin interactive)\n"

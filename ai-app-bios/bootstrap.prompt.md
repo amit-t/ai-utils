@@ -6,6 +6,189 @@ You are being invoked to bootstrap a new software project with a complete produc
 
 ---
 
+## TRIM MODE (Lightweight Bootstrap)
+
+**Check `TRIM_MODE` in the Bootstrap Context at the bottom of this prompt.**
+
+**If `TRIM_MODE` is `true`, follow ONLY the steps in this section. Skip everything below the "END OF TRIM MODE" marker.**
+
+Trim mode sets up a lightweight project HQ with only `ai-fs-os`. No pm-os, uxd-os, or doe-os are created. The current directory is treated as HQ. If it is not already a git repo, it is left as-is (no forced git init).
+
+### Trim Step 1: Interview
+
+Introduce yourself in one line: "I'll set up a lightweight project HQ with ai-fs-os. Let me ask a few quick questions."
+
+Ask these together:
+- **Project name** (e.g. "EverPlan", "TaskFlow", "BabbleAI")
+- **One-line product description** — what it does and for whom
+- **GitHub org or username** under which the ai-fs-os repo will be created. Default: personal GitHub account — press Enter to accept.
+
+Show a compact summary and ask: **"Ready to set up? [Y/n]"**
+
+If they say no, ask what to change and loop back.
+
+### Trim Step 2: Compute Values
+
+- **project_slug**: lowercase, hyphens only. Examples: "EverPlan" → `everplan`, "My App" → `my-app`
+- **FSOS_DIR** = `{ROOT_DIR}/{project_slug}-ai-fs-os`
+- **GITHUB_ORG** = the GitHub org or username provided (may be empty → personal account)
+- **GITHUB_ORG_OR_USER** = `GITHUB_ORG` if set, else obtain via `gh api user -q .login`
+- **IS_GIT_REPO** = true if `{ROOT_DIR}/.git` exists, false otherwise
+
+### Trim Step 3: Execute
+
+Run these steps in order. Announce each step as you go.
+
+#### 3.T1 — Pre-flight: Detect GitHub auth mode
+
+Before running any `gh` or `git` commands, check the active GitHub auth configuration:
+
+```bash
+gh auth status
+```
+
+Look at the output:
+- If it shows `Logged in to github.com` with **HTTPS** — use `https://github.com/` URLs.
+- If it shows a **custom hostname** (e.g. `github.com-at`) or **SSH** protocol, use SSH URLs.
+
+**How to detect the correct SSH hostname:**
+```bash
+grep -A5 "Host github" ~/.ssh/config 2>/dev/null || echo "No custom SSH host config found"
+gh auth status 2>&1 | grep -E "Logged in|hostname|Token"
+```
+
+Store `GIT_URL_PREFIX` as in full-mode pre-flight (HTTPS / SSH / SSH+alias).
+
+#### 3.T2 — Verify CLI tools
+
+```bash
+command -v gh >/dev/null 2>&1  || { echo "Error: 'gh' (GitHub CLI) is required."; exit 1; }
+command -v git >/dev/null 2>&1 || { echo "Error: 'git' not found."; exit 1; }
+```
+
+#### 3.T3 — HQ directory setup
+
+ROOT_DIR is the current working directory. **Do NOT run `git init` or force it to become a repo.**
+
+Check if it is already a git repo:
+```bash
+[[ -d "{ROOT_DIR}/.git" ]] && echo "HQ is a git repo" || echo "HQ is not a git repo"
+```
+
+Create basic project subdirectories:
+```bash
+mkdir -p {ROOT_DIR}/product
+mkdir -p {ROOT_DIR}/engineering
+mkdir -p {ROOT_DIR}/tools
+```
+
+#### 3.T4 — Create ai-fs-os from template
+
+Use the upstream `AppIncubatorHQ/ai-fs-os` as a **template** to create a private repo (not a fork):
+
+If `GITHUB_ORG` is set:
+```bash
+cd {ROOT_DIR}
+gh repo create {GITHUB_ORG}/{project_slug}-ai-fs-os \
+  --template AppIncubatorHQ/ai-fs-os \
+  --private \
+  --clone
+```
+If no org (personal account):
+```bash
+cd {ROOT_DIR}
+gh repo create {project_slug}-ai-fs-os \
+  --template AppIncubatorHQ/ai-fs-os \
+  --private \
+  --clone
+```
+
+Verify the clone:
+```bash
+[[ -d "{ROOT_DIR}/{project_slug}-ai-fs-os/.git" ]] && echo "✓ ai-fs-os created" || echo "✗ ai-fs-os not found at expected path"
+ls "{ROOT_DIR}/{project_slug}-ai-fs-os/"
+```
+
+If `gh repo create --clone` placed the repo in the wrong directory (e.g. inside a nested path), move it to `{ROOT_DIR}/{project_slug}-ai-fs-os/`.
+
+#### 3.T5 — Write minimal CLAUDE.md (only if HQ is a git repo)
+
+**Only if `IS_GIT_REPO` is true**, write `{ROOT_DIR}/CLAUDE.md`:
+
+```markdown
+# {project_name} — Project HQ
+
+{product_desc}
+
+## Project Structure
+
+\`\`\`
+{ROOT_DIR}/
+  {project_slug}-ai-fs-os/       # AI File System OS (private, from template)
+  product/                        # Product OS repos (add with add-os)
+  engineering/                    # Engineering OS repos (add with add-os)
+  tools/                          # Shared tooling
+\`\`\`
+
+## Adding More OS Repos
+
+To provision additional OS repos into this project:
+
+\`\`\`bash
+add-os --cly --os pm-os       # Product Management OS
+add-os --cly --os doe-os      # Director of Engineering OS
+add-os --cly --os uxd-os      # UX Design OS
+\`\`\`
+
+Or run `boot-app` (without --trim) for the full bootstrap with all OS repos,
+business context interview, and architecture scaffolding.
+```
+
+**If HQ is NOT a git repo, skip writing CLAUDE.md** — it will not be tracked.
+
+#### 3.T6 — Commit HQ changes (only if HQ is a git repo)
+
+**Only if `IS_GIT_REPO` is true** and there are changes to commit:
+
+```bash
+cd {ROOT_DIR}
+git add .
+git diff --quiet && git diff --cached --quiet || \
+  git commit -m "feat: initialize {project_name} HQ with ai-fs-os (trim mode)"
+```
+
+Do NOT push unless the user asks.
+
+### Trim Step 4: Print Summary
+
+```
+── Trim Setup Complete ─────────────────────────────
+
+  ✓ HQ directory:   {ROOT_DIR}  (git repo: {yes/no})
+  ✓ ai-fs-os:       {FSOS_DIR}  (private, from template)
+  ✓ GitHub repo:    {GITHUB_ORG_OR_USER}/{project_slug}-ai-fs-os
+
+── Next Steps ──────────────────────────────────────
+
+  1. cd {FSOS_DIR} and customise your AI file system OS
+  2. To add more OS repos later:
+       add-os --cly --os pm-os
+       add-os --cly --os doe-os
+       add-os --cly --os uxd-os
+  3. For full project setup (all OS repos + business context + architecture):
+       boot-app  (without --trim)
+```
+
+**End of trim mode. Stop here — do not continue to the full bootstrap steps below.**
+
+---
+### END OF TRIM MODE
+---
+
+**If `TRIM_MODE` is `false` (or not set), continue with the full bootstrap below.**
+
+---
+
 ## Step 1: Interview
 
 Introduce yourself in one line: "I'll set up your project's PM OS, Engineering OS, UX Design OS, and root planning layer. Let me ask a few questions."

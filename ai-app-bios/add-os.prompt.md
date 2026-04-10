@@ -13,15 +13,20 @@ The Runtime Context block at the end of this prompt provides the specific OS to 
 
 If `UPSTREAM_URL` is empty in the Runtime Context, look up the default here:
 
-| OS name  | Default upstream URL                                    | Local placement       |
-|----------|---------------------------------------------------------|-----------------------|
-| `uxd-os` | `git@github.com-at:AppIncubatorHQ/uxd-os.git`          | `product/`            |
-| `pm-os`  | `https://github.com/AppIncubatorHQ/pm-os`               | `product/`            |
-| `doe-os` | `https://github.com/AppIncubatorHQ/doe-os`              | `engineering/`        |
+| OS name     | Default upstream URL                                    | Local placement       | Method          |
+|-------------|---------------------------------------------------------|-----------------------|-----------------|
+| `uxd-os`    | `git@github.com-at:AppIncubatorHQ/uxd-os.git`          | `product/`            | fork            |
+| `pm-os`     | `https://github.com/AppIncubatorHQ/pm-os`               | `product/`            | fork            |
+| `doe-os`    | `https://github.com/AppIncubatorHQ/doe-os`              | `engineering/`        | fork            |
+| `ai-fs-os`  | `https://github.com/AppIncubatorHQ/ai-fs-os`            | `.` (root level)      | template+private|
 
 For any OS not in this table, default to `product/` for placement and require an explicit
 `UPSTREAM_URL` — if none was provided and the OS is unknown, stop and report an error
 in `${RESULT_FILE}`.
+
+**Method column:**
+- `fork` — standard `gh repo fork` (maintains fork relationship to upstream)
+- `template+private` — use `gh repo create --template --private` (fresh private repo, no fork link)
 
 ---
 
@@ -64,10 +69,13 @@ Use `${GIT_URL_PREFIX}/{org_or_user}/{fork_name}.git` for all clone URLs.
 
 Using the `OS_NAME` from the Runtime Context:
 
-1. Look up the placement directory from the Known OS Defaults table above.
+1. Look up the placement directory and method from the Known OS Defaults table above.
 2. Set `FORK_NAME` = `{project_slug}-{OS_NAME}` (e.g. `everplan-uxd-os`)
-3. Set `OS_DIR` = `${PROJECT_ROOT}/{placement}/{FORK_NAME}` (e.g. `${PROJECT_ROOT}/product/everplan-uxd-os`)
+3. Set `OS_DIR`:
+   - If placement is `.` (root level): `OS_DIR` = `${PROJECT_ROOT}/{FORK_NAME}`
+   - Otherwise: `OS_DIR` = `${PROJECT_ROOT}/{placement}/{FORK_NAME}`
 4. Set `UPSTREAM_URL` = the value from Runtime Context if non-empty, otherwise the known default.
+5. Set `METHOD` = the method from the Known OS Defaults table (`fork` or `template+private`). Default: `fork`.
 
 Check whether `OS_DIR` already exists:
 ```bash
@@ -82,7 +90,45 @@ Then exit.
 
 ---
 
-## Step 4 — Fork on GitHub
+## Step 4 — Create repo on GitHub
+
+**If `METHOD` is `template+private`** (e.g. `ai-fs-os`):
+
+Use the upstream as a template to create a private repo (no fork relationship):
+
+If `GITHUB_ORG` is set:
+```bash
+cd "${PROJECT_ROOT}"
+gh repo create {GITHUB_ORG}/{FORK_NAME} \
+  --template {UPSTREAM_URL_WITHOUT_DOT_GIT} \
+  --private \
+  --clone
+```
+If personal account:
+```bash
+cd "${PROJECT_ROOT}"
+gh repo create {FORK_NAME} \
+  --template {UPSTREAM_URL_WITHOUT_DOT_GIT} \
+  --private \
+  --clone
+```
+
+Where `{UPSTREAM_URL_WITHOUT_DOT_GIT}` is the upstream URL with `.git` stripped (e.g. `AppIncubatorHQ/ai-fs-os`). You can also use the `OWNER/REPO` shorthand.
+
+After `gh repo create --clone`, verify the repo landed at `OS_DIR`:
+```bash
+[[ -d "${OS_DIR}/.git" ]] && echo "✓ Created from template" || echo "✗ Not found at expected path"
+```
+
+If it cloned to a different directory name, move it to `OS_DIR`.
+
+**Skip Step 5** (clone step) — `gh repo create --clone` already cloned the repo.
+**Skip adding upstream remote** — template repos have no fork relationship to track.
+**Proceed directly to Step 6** (business context).
+
+---
+
+**If `METHOD` is `fork`** (standard, for pm-os, doe-os, uxd-os, etc.):
 
 Fork the upstream OS repo under the project's org:
 
@@ -100,7 +146,9 @@ clone step. Do not treat an already-existing fork as an error.
 
 ---
 
-## Step 5 — Clone into the correct local directory
+## Step 5 — Clone into the correct local directory (fork method only)
+
+**Skip this step if `METHOD` is `template+private`** — the repo was already cloned in Step 4.
 
 ```bash
 mkdir -p "$(dirname ${OS_DIR})"
@@ -219,13 +267,14 @@ Write `${RESULT_FILE}`:
 **Fork name:** {FORK_NAME}
 **Local path:** {OS_DIR}
 **Upstream:** {UPSTREAM_URL}
-**Fork URL:** {fork_url_on_github}
+**Method:** {METHOD}  (fork / template+private)
+**Repo URL:** {repo_url_on_github}
 
 ## Actions taken
 
-- [x] Forked {UPSTREAM_URL} → {org}/{FORK_NAME} on GitHub
+- [x] Created {FORK_NAME} on GitHub  (forked from / created from template: {UPSTREAM_URL})
 - [x] Cloned to {OS_DIR}
-- [x] Upstream remote configured
+- [x] Upstream remote configured  (or: "N/A — template method, no upstream remote")
 - [x] Business info pre-filled  (or: "Skipped — no template found" / "Skipped — no pm-os business info")
 - [x] Committed and pushed to origin
 
