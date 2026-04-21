@@ -1,0 +1,5 @@
+.env
+mcp/jira.mcp.json
+.mcp-config-*.json
+fitness_output/
+.epic_fitness_tmp/

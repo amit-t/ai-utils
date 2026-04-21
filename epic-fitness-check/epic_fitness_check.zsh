@@ -13,7 +13,9 @@
 #
 #  Input Modes:
 #    FILE mode (default) — reads .doc/.docx files from a directory
-#    MCP mode (--mcp --jira) — pulls epics live from Jira via MCP
+#    MCP mode (--mcp --jira) — pulls epics live from Jira via MCP (IDs on CLI)
+#    MCP-interactive mode (--mcpi --jira) — verifies Jira MCP connection, then
+#                                           prompts for epic IDs interactively
 #
 #  Usage:
 #    FILE mode:
@@ -24,12 +26,17 @@
 #      ./epic_fitness_check.zsh --cly --mcp --jira [PORTFOLIO] EPIC-1 EPIC-2 ...
 #      ./epic_fitness_check.zsh --dev --mcp --jira [PORTFOLIO] EPIC-1 EPIC-2 ...
 #
+#    MCP-interactive mode:
+#      ./epic_fitness_check.zsh --cly --mcpi --jira [PORTFOLIO]
+#      ./epic_fitness_check.zsh --dev --mcpi --jira [PORTFOLIO]
+#
 #  Examples:
 #    ./epic_fitness_check.zsh --cly ./Engage "Engage"
 #    ./epic_fitness_check.zsh --dev ./Core   "Core"
 #    ./epic_fitness_check.zsh --cly                         # current dir, auto-named
 #    ./epic_fitness_check.zsh --cly --mcp --jira "Engage" ICS-21226 ICS-21799
 #    ./epic_fitness_check.zsh --dev --mcp --jira "Core" REQ-7318 ICS-23947
+#    ./epic_fitness_check.zsh --cly --mcpi --jira "Engage"  # interactive
 #
 #  Requires: claude CLI (for --cly) OR devin CLI (for --dev)
 # =============================================================================
@@ -47,6 +54,7 @@ for arg in "$@"; do
         --cly)  AI_MODE="claude" ;;
         --dev)  AI_MODE="devin"  ;;
         --mcp)  INPUT_MODE="mcp" ;;
+        --mcpi) INPUT_MODE="mcpi" ;;
         --jira) MCP_SOURCE="jira" ;;
         *)      POSITIONAL+=("$arg") ;;
     esac
@@ -56,14 +64,21 @@ if [[ -z "$AI_MODE" ]]; then
     echo "ERROR: Specify --cly (Claude Code) or --dev (Devin)"
     echo ""
     echo "Usage:"
-    echo "  FILE mode:  $0 --cly|--dev [EPIC_DIR] [PORTFOLIO]"
-    echo "  MCP mode:   $0 --cly|--dev --mcp --jira [PORTFOLIO] EPIC-1 EPIC-2 ..."
+    echo "  FILE mode:            $0 --cly|--dev [EPIC_DIR] [PORTFOLIO]"
+    echo "  MCP mode:             $0 --cly|--dev --mcp  --jira [PORTFOLIO] EPIC-1 EPIC-2 ..."
+    echo "  MCP-interactive mode: $0 --cly|--dev --mcpi --jira [PORTFOLIO]"
     exit 1
 fi
 
 if [[ "$INPUT_MODE" == "mcp" && -z "$MCP_SOURCE" ]]; then
     echo "ERROR: --mcp requires a source flag (currently supported: --jira)"
     echo "Usage: $0 --cly|--dev --mcp --jira [PORTFOLIO] EPIC-1 EPIC-2 ..."
+    exit 1
+fi
+
+if [[ "$INPUT_MODE" == "mcpi" && -z "$MCP_SOURCE" ]]; then
+    echo "ERROR: --mcpi requires a source flag (currently supported: --jira)"
+    echo "Usage: $0 --cly|--dev --mcpi --jira [PORTFOLIO]"
     exit 1
 fi
 
@@ -80,6 +95,15 @@ if [[ "$INPUT_MODE" == "mcp" ]]; then
         echo "Usage: $0 --cly|--dev --mcp --jira PORTFOLIO EPIC-1 EPIC-2 ..."
         exit 1
     fi
+    EPIC_DIR="$(pwd)"
+    OUTPUT_DIR="$EPIC_DIR/fitness_output"
+    TMP_DIR="$EPIC_DIR/.epic_fitness_tmp"
+    CONVERTED=0
+elif [[ "$INPUT_MODE" == "mcpi" ]]; then
+    # MCP-interactive mode: portfolio from positional, epic IDs gathered at runtime
+    PORTFOLIO="${POSITIONAL[0]:-mcp-epics}"
+    EPIC_IDS=()
+    EPIC_COUNT=0
     EPIC_DIR="$(pwd)"
     OUTPUT_DIR="$EPIC_DIR/fitness_output"
     TMP_DIR="$EPIC_DIR/.epic_fitness_tmp"
@@ -114,6 +138,8 @@ echo -e "${BOLD}  EPIC FITNESS CHECK — AI-DRIVEN${NC}"
 if [[ "$INPUT_MODE" == "mcp" ]]; then
     echo -e "${BOLD}  Agent: ${AI_MODE_UPPER} | Source: MCP+${MCP_SOURCE_UPPER} | Portfolio: $PORTFOLIO${NC}"
     echo -e "${BOLD}  Epics: ${EPIC_IDS[*]}${NC}"
+elif [[ "$INPUT_MODE" == "mcpi" ]]; then
+    echo -e "${BOLD}  Agent: ${AI_MODE_UPPER} | Source: MCP+${MCP_SOURCE_UPPER} (interactive) | Portfolio: $PORTFOLIO${NC}"
 else
     echo -e "${BOLD}  Agent: ${AI_MODE_UPPER} | Source: FILE | Portfolio: $PORTFOLIO${NC}"
 fi
@@ -132,6 +158,110 @@ fi
 
 # ── Create output directory ─────────────────────────────────────────────────
 mkdir -p "$OUTPUT_DIR"
+
+# ── MCP-interactive mode: verify Jira MCP, then collect epic IDs ────────────
+# Track the rendered ephemeral MCP config so it can be used by the main agent
+# invocation later and cleaned up on exit.
+EPHEMERAL_MCP_CONFIG=""
+cleanup_ephemeral_mcp() {
+    [[ -n "$EPHEMERAL_MCP_CONFIG" && -f "$EPHEMERAL_MCP_CONFIG" ]] && rm -f "$EPHEMERAL_MCP_CONFIG"
+}
+trap cleanup_ephemeral_mcp EXIT
+
+if [[ "$INPUT_MODE" == "mcpi" ]]; then
+    echo ""
+    echo -e "${BOLD}────────────────────────────────────────────────────────${NC}"
+    echo -e "${BOLD}  VERIFYING ${MCP_SOURCE_UPPER} MCP CONFIGURATION${NC}"
+    echo -e "${BOLD}────────────────────────────────────────────────────────${NC}"
+    echo ""
+
+    if ! command -v claude >/dev/null 2>&1; then
+        err "claude CLI not found — required to verify MCP config. Install: npm install -g @anthropic-ai/claude-code"
+    fi
+    if ! command -v envsubst >/dev/null 2>&1; then
+        err "envsubst not found. Install: brew install gettext (may need 'brew link --force gettext')"
+    fi
+
+    # Step 1: load env vars from SCRIPT_DIR/.env so the config stays portable
+    # across cwds and credentials never hit the global claude config.
+    ENV_FILE="$SCRIPT_DIR/.env"
+    MCP_TEMPLATE="$SCRIPT_DIR/mcp/jira.mcp.json.template"
+
+    [[ -f "$ENV_FILE" ]]    || err ".env not found at $ENV_FILE — copy .env.example to .env and fill in values"
+    [[ -f "$MCP_TEMPLATE" ]] || err "MCP template missing at $MCP_TEMPLATE"
+
+    log "Loading credentials from $ENV_FILE"
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
+
+    # Fail fast if anything the template needs is blank.
+    REQUIRED_VARS=(JIRA_URL JIRA_PERSONAL_TOKEN JIRA_SSL_VERIFY CONFLUENCE_URL CONFLUENCE_PERSONAL_TOKEN CONFLUENCE_SSL_VERIFY)
+    for v in "${REQUIRED_VARS[@]}"; do
+        if [[ -z "${!v:-}" ]]; then
+            err "Required variable $v is empty in $ENV_FILE"
+        fi
+    done
+    ok "Loaded ${#REQUIRED_VARS[@]} credential vars"
+
+    # Step 2: render the template into a temp file. Restrict envsubst to our
+    # named vars so unrelated $HOME / $PATH references in the template (if any)
+    # are left alone.
+    EPHEMERAL_MCP_CONFIG="$(mktemp -t epic_fitness_mcp.XXXXXX).json"
+    envsubst '$JIRA_URL $JIRA_PERSONAL_TOKEN $JIRA_SSL_VERIFY $CONFLUENCE_URL $CONFLUENCE_PERSONAL_TOKEN $CONFLUENCE_SSL_VERIFY' \
+        < "$MCP_TEMPLATE" > "$EPHEMERAL_MCP_CONFIG"
+    chmod 600 "$EPHEMERAL_MCP_CONFIG"
+    ok "Rendered ephemeral MCP config → $EPHEMERAL_MCP_CONFIG"
+
+    # Step 3: live-test the connection. Pass --mcp-config so claude loads ONLY
+    # the jira server for this invocation; no mutation of ~/.claude.json.
+    log "Testing live connection to Jira MCP server (this may take ~15s to pull/start docker)..."
+    JIRA_PING_PROMPT='List the tools exposed by the mcp-atlassian MCP server. If the server is unreachable or no atlassian tools are available, print the exact token JIRA_MCP_UNAVAILABLE and nothing else. Otherwise print the exact token JIRA_MCP_OK on its own line, followed by a newline and a comma-separated list of the tool names. Do not print any other commentary.'
+    PING_OUT="$(unset CLAUDECODE; claude -p --mcp-config "$EPHEMERAL_MCP_CONFIG" --dangerously-skip-permissions "$JIRA_PING_PROMPT" 2>&1 || true)"
+
+    if echo "$PING_OUT" | grep -q "JIRA_MCP_OK"; then
+        ok "Jira MCP is responding"
+        TOOLS_LINE="$(echo "$PING_OUT" | grep -v "JIRA_MCP_OK" | grep -v '^$' | head -n1)"
+        [[ -n "$TOOLS_LINE" ]] && log "  tools: $TOOLS_LINE"
+    elif echo "$PING_OUT" | grep -q "JIRA_MCP_UNAVAILABLE"; then
+        echo "$PING_OUT" | sed 's/^/    /'
+        err "Jira MCP reported UNAVAILABLE. Check docker daemon, network, and credentials in $ENV_FILE."
+    else
+        echo "$PING_OUT" | sed 's/^/    /'
+        warn "Could not unambiguously confirm Jira MCP health; continuing anyway."
+    fi
+
+    # Step 4: interactively collect epic IDs.
+    echo ""
+    echo -e "${BOLD}────────────────────────────────────────────────────────${NC}"
+    echo -e "${BOLD}  ENTER JIRA EPIC IDS${NC}"
+    echo -e "${BOLD}────────────────────────────────────────────────────────${NC}"
+    echo ""
+    echo "Paste epic IDs (space or newline separated). Submit an empty line to finish."
+    echo "Example: ICS-21226 ICS-21799 REQ-7318"
+    echo ""
+
+    while IFS= read -r -p "epic> " line; do
+        [[ -z "$line" ]] && break
+        # Split on whitespace — supports both per-line and space-separated input.
+        for tok in $line; do
+            EPIC_IDS+=("$tok")
+        done
+    done
+
+    EPIC_COUNT=${#EPIC_IDS[@]}
+    if [[ $EPIC_COUNT -eq 0 ]]; then
+        err "No epic IDs entered. Aborting."
+    fi
+
+    ok "Collected $EPIC_COUNT epic ID(s): ${EPIC_IDS[*]}"
+
+    # Promote to mcp mode so the rest of the pipeline (prompt assembly,
+    # .epic_ids.txt writeout, agent invocation) runs unchanged.
+    INPUT_MODE="mcp"
+    INPUT_MODE_UPPER="MCP"
+fi
 
 if [[ "$INPUT_MODE" == "file" ]]; then
     # ── FILE MODE: Discover, convert, and assemble corpus ────────────────────
@@ -444,10 +574,38 @@ RED="FCE4D6"; GRAY="F2F2F2"; WHITE="FFFFFF"; ORANGE="C55A11"
 - Framework / Score / Threshold / Verdict — one row per framework
 - Cross-tab formula references (e.g. ='1-Grooming'!C15)
 - Overall decision formula combining all 5 verdicts
+- Note at bottom: "See Jira-Updates tab for copy-paste ready content suggestions"
 
 ### Tab 8: "Actions" (tab color: ORANGE)
+- Columns A(5), B(60), C(20), D(60)
+- Row 1: section header "RECOMMENDED ACTIONS — Priority order" (ORANGE bg, white text)
+- Row 2: column headers: #, Action (what to do and why), Priority, Suggested Jira Text (snippet)
 - Numbered list of recommended actions specific to THIS epic's gaps
 - Be specific: reference the actual gaps found (e.g. "Write Given/When/Then ACs — currently none exist")
+- For EACH action, column D must contain a brief snippet of the suggested text (first ~100 chars) with a note "→ See Jira-Updates tab for full text"
+- Priority column: HIGH (RED bg) = mandatory blockers, MEDIUM (YELLOW bg) = framework gaps, LOW (GREEN bg) = improvements
+
+### Tab 9: "Jira-Updates" (tab color: 70AD47)
+- Columns A(22), B(50), C(55), D(55), E(40)
+- Row 1: merged header "SUGGESTED JIRA CONTENT UPDATES" (NAVY bg, white text, 13pt bold)
+- Row 2: merged subheader "Review each row. If relevant, copy the SUGGESTED CONTENT cell and paste directly into the Jira field." (BLUE bg, white, 9pt)
+- Row 3: column headers: Jira Field, Field Label, CURRENT CONTENT (Full), SUGGESTED CONTENT (Copy-paste ready), Why This Change Fixes It
+- For EVERY gap or weakness identified across all 5 frameworks, add a row:
+  - Col A: Jira field key (e.g. summary, description, customfield_acceptance_criteria, customfield_dod, customfield_business_value, customfield_size)
+  - Col B: Human label (e.g. "Epic Title", "Description / Problem Statement", "Acceptance Criteria", "Definition of Done", "Business Value", "Size Estimate")
+  - Col C: FULL current content verbatim from the epic — do NOT truncate. If field is empty/missing write "⚠️ EMPTY — Not set in Jira". Col C cell bg = RED (FCE4D6) for gaps, GREEN (E2EFDA) if already acceptable.
+  - Col D: AI-generated REPLACEMENT or ADDITION text, ready to copy-paste into Jira. Must be complete and specific to this epic's domain. Col D cell bg = GREEN (E2EFDA) always. If no change needed write "✅ No change needed".
+  - Col E: One sentence citing which framework criterion this satisfies (e.g. "Satisfies G3 — Acceptance Criteria defined at epic level"). Col E cell bg = YELLOW (FFFFC0).
+- Wrap text ON for columns C and D. Row height auto-fit.
+- ALWAYS generate content for these fields (even if some are already good):
+  1. **Epic Title** — if not following [Product]|[Domain]|[Feature] pattern or >10 words, suggest a compliant title
+  2. **Description / Problem Statement** — if solution-focused or vague, rewrite as a genuine problem statement ("The problem of... affects... the impact is... a successful solution would...")
+  3. **Acceptance Criteria** — if missing or weak, generate 3–5 proper Given/When/Then scenarios derived from the epic's actual stated goals and domain context. Each scenario on its own line: "Given [precondition] / When [action] / Then [measurable outcome]"
+  4. **Definition of Done** — if missing, generate a DoD checklist (8–12 items) appropriate for the epic type detected (API/backend, UI/frontend, data pipeline, integration, etc.)
+  5. **Business Value** — if missing or just cost codes, rewrite as a quantified outcome statement ("Enables X, reducing Y by Z%, improving [metric] for [persona]")
+  6. **Size / Effort Estimate** — if missing, suggest a T-shirt size (S/M/L/XL) with a brief rationale based on scope
+  7. Any other specific gaps found during the 5-framework assessment
+- After the gap rows, add a divider row then a "FIELDS ALREADY ACCEPTABLE" section listing fields that scored well (GREEN bg rows, "✅ No change needed" in col D)
 
 ### File naming: `{EPIC_ID}_Fitness_Check.xlsx`
 
@@ -505,10 +663,12 @@ Write a Python script that:
    parent link, comments, custom fields (PI, scrum team, business owner, size estimate)
 3. Save the raw fetched JSON for each epic to `{OUTPUT_DIR}/.raw/{EPIC_ID}.json`
 4. Scores each epic against all 5 frameworks using YOUR AI judgment (not keyword matching)
-5. Generates individual workbooks with all 8 tabs, proper formatting, formulas, colors
-6. Generates portfolio summary workbook
-7. Generates assessment email with real numbers
-8. Prints progress to stdout
+5. Generates individual workbooks with all 9 tabs (including "Jira-Updates"), proper formatting, formulas, colors
+6. For the "Jira-Updates" tab: include the FULL verbatim current content of every assessed field in column C,
+   and generate complete copy-paste-ready suggested replacements in column D (not summaries — full text)
+7. Generates portfolio summary workbook
+8. Generates assessment email with real numbers
+9. Prints progress to stdout
 
 Run the script after writing it. Use `pip install openpyxl --break-system-packages -q` if needed.
 
@@ -526,10 +686,13 @@ Write a Python script that:
 2. Parses each epic section
 3. Extracts metadata (ID, title, status, PI, priority, PM, eng lead, BO, parent link, scrum team)
 4. Scores each epic against all 5 frameworks using YOUR AI judgment (not keyword matching)
-5. Generates individual workbooks with all 8 tabs, proper formatting, formulas, colors
-6. Generates portfolio summary workbook
-7. Generates assessment email with real numbers
-8. Prints progress to stdout
+5. Generates individual workbooks with all 9 tabs (including "Jira-Updates"), proper formatting, formulas, colors
+6. For the "Jira-Updates" tab: include the FULL verbatim current content of every assessed field in column C,
+   and generate complete copy-paste-ready suggested replacements in column D (not summaries — full text).
+   The PO should be able to read column D and paste it directly into Jira with zero editing needed.
+7. Generates portfolio summary workbook
+8. Generates assessment email with real numbers
+9. Prints progress to stdout
 
 Run the script after writing it. Use `pip install openpyxl --break-system-packages -q` if needed.
 
@@ -574,12 +737,18 @@ if [[ "$AI_MODE" == "claude" ]]; then
     # Claude Code invocation:
     #   -p  = non-interactive (pipe mode — takes prompt, runs autonomously, exits)
     #   --dangerously-skip-permissions = YOLO mode (auto-approves all tool use)
+    #   --mcp-config (only when --mcpi was used) = ephemeral jira MCP for this
+    #     run only; never touches global claude config
     #   Unset CLAUDECODE to allow running from within an existing Claude session
     #   We cd into OUTPUT_DIR so Claude sees the corpus and writes output there
     (
         cd "$OUTPUT_DIR"
         unset CLAUDECODE
-        claude -p --dangerously-skip-permissions "$PROMPT_CONTENT"
+        if [[ -n "$EPHEMERAL_MCP_CONFIG" && -f "$EPHEMERAL_MCP_CONFIG" ]]; then
+            claude -p --mcp-config "$EPHEMERAL_MCP_CONFIG" --dangerously-skip-permissions "$PROMPT_CONTENT"
+        else
+            claude -p --dangerously-skip-permissions "$PROMPT_CONTENT"
+        fi
     )
     EXIT_CODE=$?
 
